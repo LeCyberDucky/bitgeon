@@ -10,3 +10,5 @@ edition = "2018"
 console = "0.10.1"
 dialoguer = "0.5.1"
 indicatif = "0.14.0"
+crossbeam-channel = "0.4.2"
+tui = { version = "0.9.1", default-features = false, features = ['crossterm'] }

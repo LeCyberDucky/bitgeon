@@ -1,31 +1,17 @@
 use console::Term;
+use crossbeam_channel::unbounded;
 use dialoguer::{theme::ColorfulTheme, Select};
 use indicatif::{ProgressBar, ProgressStyle};
 use std::ops::Deref;
 use std::thread;
 use std::time::Duration;
-
-fn main() {
-    // Initialize state machine
-    let mut application = StateMachine {
-        secret_key: String::from("Swordfish"),
-        terminal: Term::stdout(),
-        state: State(StateMachine::init),
-    };
-
-    // Run state machine
-    while application.state != State(StateMachine::exit) {
-        application.run();
-    }
-}
-
-
-struct State(fn(&mut StateMachine) -> State);
+    
+pub struct State(pub fn(&mut StateMachine) -> State);
 
 // Used for comparing states
 impl PartialEq for State {
     fn eq(&self, rhs: &Self) -> bool {
-        self.0 as *const fn(&mut StateMachine) -> State 
+        self.0 as *const fn(&mut StateMachine) -> State
             == rhs.0 as *const fn(&mut StateMachine) -> State
     }
 }
@@ -39,51 +25,52 @@ impl Deref for State {
     }
 }
 
+pub struct StateMachine {
+    pub secret_key: String,
 
-struct StateMachine {
-    secret_key: String,
-
-    state: State,
-    terminal: Term,
+    pub state: State,
+    pub terminal: Term,
 }
 
 impl StateMachine {
-    fn run(&mut self) {
+    pub fn run(&mut self) {
         self.state = (self.state)(self);
     }
 
     // #####################
     // State implementations
     // #####################
-    
-    fn end(&mut self) -> State {
+
+    pub fn add_files(&mut self) -> State {
+        self.terminal.clear_screen();
+        println!("Drop files here to make them available for transmission. Press enter when you are done:\n");
+        State(Self::send)
+    }
+
+    pub fn end(&mut self) -> State {
         self.terminal.clear_screen();
         State(Self::exit)
     }
-    
-    fn exit(&mut self) -> State {
+
+    pub fn exit(&mut self) -> State {
         State(Self::exit)
     }
-    
-    fn home(&mut self) -> State {
+
+    pub fn home(&mut self) -> State {
         self.terminal.clear_screen();
-        
-        let options = &[
-            "Send",
-            "Receive",
-            "End",
-            ];
-            
+
+        let options = &["Send", "Receive", "End"];
+
         let selection = Select::with_theme(&ColorfulTheme::default())
-        .with_prompt("Choose an option:")
-        .default(0)
-        .items(&options[..])
-        .interact()
-        .unwrap();
-        
+            .with_prompt("Choose an option")
+            .default(0)
+            .items(&options[..])
+            .interact()
+            .unwrap();
+
         self.terminal.clear_screen();
-        
-        // TODO: Find better way for doing this. Matching against enums or something instead would be nice. 
+
+        // TODO: Find better way for doing this. Matching against enums or something instead would be nice.
         match selection {
             0 => State(Self::send),
             1 => State(Self::receive),
@@ -91,30 +78,46 @@ impl StateMachine {
             _ => State(Self::exit),
         }
     }
-    
-    fn init(&mut self) -> State {
+
+    pub fn init(&mut self) -> State {
         self.terminal.clear_screen();
         println!("Initializing!");
         State(Self::home)
     }
-    
-    fn receive(&mut self) -> State {
+
+    pub fn receive(&mut self) -> State {
         println!("Receiving!");
         State(Self::end)
     }
-    
-    fn send(&mut self) -> State {
+
+    pub fn send(&mut self) -> State {
+        // Logic for this state: 
+        /* Continuously: 
+         * - Show sending progress 
+         * - Allow user to do stuff (Menu to go to different state [home, add files])
+         *
+         *
+         */
+        
+
+
+
+
+
+
+
+
         println!("Sending!");
-        
+
         let pb = ProgressBar::new(1024);
-        
+
         for _ in 0..1024 {
             pb.inc(1);
             thread::sleep(Duration::from_millis(5));
         }
-        
+
         pb.finish_with_message("done");
-        
+
         State(Self::end)
     }
 }
