@@ -12,3 +12,6 @@ dialoguer = "0.5.1"
 indicatif = "0.14.0"
 crossbeam-channel = "0.4.2"
 tui = { version = "0.9.1", default-features = false, features = ['crossterm'] }
+rand = "0.7.3"
+crossterm = "0.17.3"
+argh = "0.1.3"

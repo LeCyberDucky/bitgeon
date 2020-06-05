@@ -1,11 +1,10 @@
-use console::Term;
-use crossbeam_channel::unbounded;
-use dialoguer::{theme::ColorfulTheme, Select};
-use indicatif::{ProgressBar, ProgressStyle};
 use std::ops::Deref;
-use std::thread;
-use std::time::Duration;
-    
+
+use tui::{self, widgets::ListState};
+
+use crate::ui::{UIElement, UIMenu, UIMessage, UIEvent, AppState};
+use crate::util;
+
 pub struct State(pub fn(&mut StateMachine) -> State);
 
 // Used for comparing states
@@ -27,28 +26,23 @@ impl Deref for State {
 
 pub struct StateMachine {
     pub secret_key: String,
-
     pub state: State,
-    pub terminal: Term,
+    pub ui: util::Channel<UIMessage>,
 }
 
 impl StateMachine {
     pub fn run(&mut self) {
-        self.state = (self.state)(self);
+        while self.state != State(StateMachine::exit) {
+            self.state = (self.state)(self);
+        }
     }
 
-    // #####################
-    // State implementations
-    // #####################
-
     pub fn add_files(&mut self) -> State {
-        self.terminal.clear_screen();
-        println!("Drop files here to make them available for transmission. Press enter when you are done:\n");
         State(Self::send)
     }
 
     pub fn end(&mut self) -> State {
-        self.terminal.clear_screen();
+        self.ui.send(UIMessage::Event(UIEvent::StateChange(AppState::End)));
         State(Self::exit)
     }
 
@@ -57,67 +51,65 @@ impl StateMachine {
     }
 
     pub fn home(&mut self) -> State {
-        self.terminal.clear_screen();
+        let ui_elements = vec![UIElement::Menu(UIMenu::new(
+            String::from("Choose an option:"),
+            vec![
+                String::from("Send"),
+                String::from("Receive"),
+                String::from("End"),
+            ],
+        ))];
 
-        let options = &["Send", "Receive", "End"];
-
-        let selection = Select::with_theme(&ColorfulTheme::default())
-            .with_prompt("Choose an option")
-            .default(0)
-            .items(&options[..])
-            .interact()
-            .unwrap();
-
-        self.terminal.clear_screen();
-
-        // TODO: Find better way for doing this. Matching against enums or something instead would be nice.
-        match selection {
-            0 => State(Self::send),
-            1 => State(Self::receive),
-            2 => State(Self::end),
-            _ => State(Self::exit),
+        for element in ui_elements {
+            self.ui.send(UIMessage::Element(element));
         }
+
+        loop {
+            // interact with ui
+            let ui_updates = self.ui.receive();
+
+            for message in ui_updates {
+                match message {
+                    UIMessage::Event(event) => match event {
+                        UIEvent::Selection(option) => match option {
+                            2 => return State(Self::end),
+                            _ => todo!(),
+                        }, 
+                        UIEvent::StateChange(state) => todo!(),
+                    },
+
+                    UIMessage::Element(element) => todo!(),
+                }
+            }
+        }
+
+        // // TODO: Find better way for doing this. Matching against enums or something instead would be nice.
+        // match selection {
+        //     0 => State(Self::send),
+        //     1 => State(Self::receive),
+        //     2 => State(Self::end),
+        //     _ => State(Self::exit),
+        // }
+
+        State(Self::end)
     }
 
     pub fn init(&mut self) -> State {
-        self.terminal.clear_screen();
-        println!("Initializing!");
         State(Self::home)
     }
 
     pub fn receive(&mut self) -> State {
-        println!("Receiving!");
         State(Self::end)
     }
 
     pub fn send(&mut self) -> State {
-        // Logic for this state: 
-        /* Continuously: 
-         * - Show sending progress 
+        // Logic for this state:
+        /* Continuously:
+         * - Show sending progress
          * - Allow user to do stuff (Menu to go to different state [home, add files])
          *
          *
          */
-        
-
-
-
-
-
-
-
-
-        println!("Sending!");
-
-        let pb = ProgressBar::new(1024);
-
-        for _ in 0..1024 {
-            pb.inc(1);
-            thread::sleep(Duration::from_millis(5));
-        }
-
-        pb.finish_with_message("done");
-
         State(Self::end)
     }
 }
