@@ -15,3 +15,4 @@ impl<T> Channel<T> {
         self.receiver.try_iter().collect()
     }
 }
+

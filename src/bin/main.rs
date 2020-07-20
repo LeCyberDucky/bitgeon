@@ -1,9 +1,9 @@
 use crossbeam_channel;
 use std::thread;
 
-mod state_machine;
-use state_machine::State;
-use state_machine::StateMachine;
+mod logic_state_machine;
+use logic_state_machine::State;
+use logic_state_machine::LogicStateMachine;
 mod ui;
 mod util;
 
@@ -11,9 +11,9 @@ fn main() {
     // Initialize state machine
     let (app_tx, ui_rx) = crossbeam_channel::unbounded();
     let (ui_tx, app_rx) = crossbeam_channel::unbounded();
-    let mut application = StateMachine {
+    let mut application = LogicStateMachine {
         secret_key: String::from("Swordfish"),
-        state: State(StateMachine::init),
+        state: State(LogicStateMachine::init),
         ui: util::Channel {
             sender: app_tx,
             receiver: app_rx,

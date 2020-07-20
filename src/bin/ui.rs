@@ -1,4 +1,4 @@
-// TODO: UI should also be state machine
+// TODO: UI should also be state machine. Or should it? Pseudo state machine maybe.
 use crossterm::{self, event, ExecutableCommand};
 
 use std::io;
@@ -68,16 +68,23 @@ pub enum AppState {
     Active,
     End,
 }
+#[derive(PartialEq, Copy, Clone)]
+pub enum InterfaceState {
+    MainMenu,
+    SettingsEdit,
+    Upload,
+    End,
+}
 
 pub struct UI {
     pub application: util::Channel<UIMessage>,
     pub application_state: AppState,
+    pub interface_state: InterfaceState,
     pub ui_refresh_rate: u16,
-    pub input_refresh_rate: u16,
     pub clock: time::Instant,
     pub frame_count: u64,
-    pub input_count: u64,
     pub last_frame: time::Instant,
+    pub frame_changed: bool,
 
     pub menu: UIMenu,
     pub info: UIElement,
@@ -91,12 +98,12 @@ impl UI {
         let mut ui = UI {
             application,
             application_state: AppState::Active,
-            ui_refresh_rate: 20,
-            input_refresh_rate: 200,
+            interface_state: InterfaceState::MainMenu,
+            ui_refresh_rate: 60,
             clock: time::Instant::now(),
             frame_count: 0,
-            input_count: 0,
             last_frame: time::Instant::now(),
+            frame_changed: true,
 
             menu: UIMenu::new(String::new(), vec![]),
             info: UIElement::Info,
@@ -109,14 +116,14 @@ impl UI {
         io::stdout().execute(crossterm::cursor::Hide);
         let mut terminal = tui::Terminal::new(CrosstermBackend::new(io::stdout())).unwrap();
 
-        while ui.application_state != AppState::End {
+        while ui.interface_state != InterfaceState::End {
             ui.update();
             if ui.frame_elapsed() {
                 ui.frame_count += 1;
-                ui.draw(&mut terminal);
-            }
-            if ui.input_elapsed() {
-                ui.input_count += 1;
+                if ui.frame_changed { // Visual change necessitates redraw
+                    ui.frame_changed = false;
+                    ui.draw(&mut terminal);
+                }
                 ui.interact(); // User interaction
             }
         }
@@ -176,9 +183,16 @@ impl UI {
         if event::poll(time::Duration::from_secs(0)).unwrap() {
             match event::read().unwrap() {
                 event::Event::Key(event) => match event.code {
-                    event::KeyCode::Up => self.menu.select_prev(), // TODO: Whether this makes sense might depend on the state of the app. Not sure if I like this
-                    event::KeyCode::Down => self.menu.select_next(), // TODO: What if we have no options? 
+                    event::KeyCode::Up => {
+                        self.frame_changed = true;
+                        self.menu.select_prev()
+                    }, // TODO: Whether this makes sense might depend on the state of the app. Not sure if I like this
+                    event::KeyCode::Down => {
+                        self.frame_changed = true;
+                        self.menu.select_next()
+                    }, // TODO: What if we have no options? 
                     event::KeyCode::Enter => {
+                        self.frame_changed = true;
                         match self.menu.state.selected() {
                             Some(option) => {self.application.send(UIMessage::Event(UIEvent::Selection(option)));},
                             None => (),
@@ -200,10 +214,6 @@ impl UI {
         self.clock.elapsed().as_micros() >= *count as u128 * 1000 / *rate as u128 // Should we be using floating point values here? 
     }
 
-    pub fn input_elapsed(&self) -> bool {
-        self.period_elapsed(&self.input_count, &self.input_refresh_rate)
-    }
-
     pub fn frame_elapsed(&self) -> bool {
         self.period_elapsed(&self.frame_count, &self.ui_refresh_rate)
     }
@@ -212,19 +222,28 @@ impl UI {
         // Get updates from logic of the program. Progress for progress bars for example
         let app_updates = self.application.receive();
 
-        for message in app_updates {
-            match message {
-                UIMessage::Element(element) => match element {
-                    UIElement::Menu(menu) => self.menu = menu,
-                    UIElement::Receiving => todo!(),
-                    UIElement::Sending => todo!(),
-                    UIElement::Info => todo!(),
-                },
-                UIMessage::Event(event) => match event {
-                    UIEvent::StateChange(state) => self.application_state = state,
-                    UIEvent::Selection(option) => unimplemented!(),
-                },
+        if app_updates.len() > 0 {
+            for message in app_updates {
+                match message {
+                    UIMessage::Element(element) => match element {
+                        UIElement::Menu(menu) => self.menu = menu,
+                        UIElement::Receiving => todo!(),
+                        UIElement::Sending => todo!(),
+                        UIElement::Info => todo!(),
+                    },
+                    UIMessage::Event(event) => match event {
+                        UIEvent::StateChange(state) => self.application_state = state,
+                        UIEvent::Selection(option) => unimplemented!(),
+                    },
+                }
             }
+
+            self.interface_state = match self.application_state {
+                AppState::Active => self.interface_state,
+                AppState::End => InterfaceState::End,
+            };
+
+            self.frame_changed = true;
         }
     }
 }

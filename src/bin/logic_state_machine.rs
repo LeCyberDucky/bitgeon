@@ -5,34 +5,34 @@ use tui::{self, widgets::ListState};
 use crate::ui::{UIElement, UIMenu, UIMessage, UIEvent, AppState};
 use crate::util;
 
-pub struct State(pub fn(&mut StateMachine) -> State);
+pub struct State(pub fn(&mut LogicStateMachine) -> State);
 
 // Used for comparing states
 impl PartialEq for State {
     fn eq(&self, rhs: &Self) -> bool {
-        self.0 as *const fn(&mut StateMachine) -> State
-            == rhs.0 as *const fn(&mut StateMachine) -> State
+        self.0 as *const fn(&mut LogicStateMachine) -> State
+            == rhs.0 as *const fn(&mut LogicStateMachine) -> State
     }
 }
 
 // Without this, transitions would have this zero thing: state = state.0(&mut machine);
 impl Deref for State {
-    type Target = fn(&mut StateMachine) -> State;
+    type Target = fn(&mut LogicStateMachine) -> State;
 
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
 
-pub struct StateMachine {
+pub struct LogicStateMachine {
     pub secret_key: String,
     pub state: State,
     pub ui: util::Channel<UIMessage>,
 }
 
-impl StateMachine {
+impl LogicStateMachine {
     pub fn run(&mut self) {
-        while self.state != State(StateMachine::exit) {
+        while self.state != State(LogicStateMachine::exit) {
             self.state = (self.state)(self);
         }
     }
