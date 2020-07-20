@@ -103,7 +103,7 @@ impl UI {
             clock: time::Instant::now(),
             frame_count: 0,
             last_frame: time::Instant::now(),
-            frame_changed: true,
+            frame_changed: false,
 
             menu: UIMenu::new(String::new(), vec![]),
             info: UIElement::Info,
@@ -210,12 +210,13 @@ impl UI {
         }
     }
 
-    pub fn period_elapsed(&self, count: &u64, rate: &u16) -> bool {
-        self.clock.elapsed().as_micros() >= *count as u128 * 1000 / *rate as u128 // Should we be using floating point values here? 
-    }
+    // pub fn period_elapsed(&self, count: &u64, rate: &u16) -> bool {
+    //     self.clock.elapsed().as_micros() >= *count as u128 * 1000 / *rate as u128 // Should we be using floating point values here? 
+    // }
 
     pub fn frame_elapsed(&self) -> bool {
-        self.period_elapsed(&self.frame_count, &self.ui_refresh_rate)
+        // self.period_elapsed(&self.frame_count, &self.ui_refresh_rate)
+        util::period_elapsed(&self.clock, &self.frame_count, &self.ui_refresh_rate)
     }
 
     pub fn update(&mut self) {

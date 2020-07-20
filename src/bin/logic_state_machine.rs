@@ -1,9 +1,11 @@
 use std::ops::Deref;
+use std::time;
 
 use tui::{self, widgets::ListState};
 
 use crate::ui::{UIElement, UIMenu, UIMessage, UIEvent, AppState};
 use crate::util;
+use crate::settings;
 
 pub struct State(pub fn(&mut LogicStateMachine) -> State);
 
@@ -27,7 +29,10 @@ impl Deref for State {
 pub struct LogicStateMachine {
     pub secret_key: String,
     pub state: State,
+    pub clock: time::Instant,
+    pub frame_count: u64,
     pub ui: util::Channel<UIMessage>,
+    pub settings: settings::Settings,
 }
 
 impl LogicStateMachine {
@@ -68,6 +73,8 @@ impl LogicStateMachine {
             // interact with ui
             let ui_updates = self.ui.receive();
 
+            // TODO: Create function for interacting since this needs to be repeated in multiple states. Let it update the frame count
+
             for message in ui_updates {
                 match message {
                     UIMessage::Event(event) => match event {
@@ -81,6 +88,8 @@ impl LogicStateMachine {
                     UIMessage::Element(element) => todo!(),
                 }
             }
+            
+            util::sleep_remaining_frame(&self.clock, &self.frame_count, &self.settings.internal_logic_refresh_rate);
         }
 
         // // TODO: Find better way for doing this. Matching against enums or something instead would be nice.
