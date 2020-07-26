@@ -70,11 +70,78 @@ pub enum AppState {
 }
 #[derive(PartialEq, Copy, Clone)]
 pub enum InterfaceState {
-    MainMenu,
-    SettingsEdit,
-    Upload,
-    End,
+    MainMenu(InterfaceStateMenu),
+    SettingsEdit(InterfaceStateSettings),
+    Upload(InterfaceStateUpload),
+    End(InterfaceStateEnd),
 }
+
+#[derive(PartialEq, Copy, Clone)]
+pub struct InterfaceStateMenu {}
+impl InterfaceStateMenu {
+    fn new() -> InterfaceStateMenu {
+        InterfaceStateMenu {}
+    }
+}
+
+#[derive(PartialEq, Copy, Clone)]
+pub struct InterfaceStateSettings {}
+impl InterfaceStateSettings {
+    fn new() -> InterfaceStateSettings {
+        InterfaceStateSettings {}
+    }
+}
+
+#[derive(PartialEq, Copy, Clone)]
+pub struct InterfaceStateUpload {}
+impl InterfaceStateUpload {
+    fn new() -> InterfaceStateUpload {
+        InterfaceStateUpload {}
+    }
+}
+
+#[derive(PartialEq, Copy, Clone)]
+pub struct InterfaceStateEnd {}
+impl InterfaceStateEnd {
+    fn new() -> InterfaceStateEnd {
+        InterfaceStateEnd {}
+    }
+}
+
+trait Draw {
+    fn draw(&self, ui: &UI);
+}
+
+impl Draw for InterfaceStateMenu {
+    fn draw(&self, ui: &UI) {
+        todo!();
+    }
+}
+
+impl Draw for InterfaceStateSettings {
+    fn draw(&self, ui: &UI) {
+        todo!();
+    }
+}
+
+impl Draw for InterfaceStateUpload {
+    fn draw(&self, ui: &UI) {
+        todo!();
+    }
+}
+
+impl Draw for InterfaceStateEnd {
+    fn draw(&self, ui: &UI) {
+        todo!();
+    }
+}
+
+
+
+
+
+
+
 
 pub struct UI {
     pub application: util::Channel<UIMessage>,
@@ -98,7 +165,7 @@ impl UI {
         let mut ui = UI {
             application,
             application_state: AppState::Active,
-            interface_state: InterfaceState::MainMenu,
+            interface_state: InterfaceState::MainMenu(InterfaceStateMenu::new()),
             ui_refresh_rate: 60,
             clock: time::Instant::now(),
             frame_count: 0,
@@ -116,7 +183,8 @@ impl UI {
         io::stdout().execute(crossterm::cursor::Hide);
         let mut terminal = tui::Terminal::new(CrosstermBackend::new(io::stdout())).unwrap();
 
-        while ui.interface_state != InterfaceState::End {
+        // https://stackoverflow.com/questions/32554285/compare-enums-only-by-variant-not-value
+        while std::mem::discriminant(&ui.interface_state) != std::mem::discriminant(&InterfaceState::End(InterfaceStateEnd::new())) {
             ui.update();
             if ui.frame_elapsed() {
                 ui.frame_count += 1;
@@ -241,7 +309,7 @@ impl UI {
 
             self.interface_state = match self.application_state {
                 AppState::Active => self.interface_state,
-                AppState::End => InterfaceState::End,
+                AppState::End => InterfaceState::End(InterfaceStateEnd::new()),
             };
 
             self.frame_changed = true;
