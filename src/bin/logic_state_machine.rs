@@ -3,9 +3,9 @@ use std::time;
 
 use tui::{self, widgets::ListState};
 
-use crate::ui::{UIElement, UIMenu, UIMessage, UIEvent, AppState};
-use crate::util;
 use crate::settings;
+use crate::ui::{AppState, UIEvent, UIMessage};
+use crate::util;
 
 pub struct State(pub fn(&mut LogicStateMachine) -> State);
 
@@ -47,7 +47,8 @@ impl LogicStateMachine {
     }
 
     pub fn end(&mut self) -> State {
-        self.ui.send(UIMessage::Event(UIEvent::StateChange(AppState::End)));
+        self.ui
+            .send(UIMessage::Event(UIEvent::StateChange(AppState::End)));
         State(Self::exit)
     }
 
@@ -56,40 +57,44 @@ impl LogicStateMachine {
     }
 
     pub fn home(&mut self) -> State {
-        let ui_elements = vec![UIElement::Menu(UIMenu::new(
-            String::from("Choose an option:"),
-            vec![
-                String::from("Send"),
-                String::from("Receive"),
-                String::from("End"),
-            ],
-        ))];
+        // let ui_elements = vec![UIElement::Menu(UIMenu::new(
+        //     String::from("Choose an option:"),
+        //     vec![
+        //         String::from("Send"),
+        //         String::from("Receive"),
+        //         String::from("End"),
+        //     ],
+        // ))];
 
-        for element in ui_elements {
-            self.ui.send(UIMessage::Element(element));
-        }
+        // for element in ui_elements {
+        //     self.ui.send(UIMessage::Element(element));
+        // }
+        self.ui.send(UIMessage::Event(UIEvent::StateChange(AppState::Home)));
 
         loop {
             // interact with ui
             let ui_updates = self.ui.receive();
 
             // TODO: Create function for interacting since this needs to be repeated in multiple states. Let it update the frame count
-
             for message in ui_updates {
                 match message {
                     UIMessage::Event(event) => match event {
                         UIEvent::Selection(option) => match option {
                             2 => return State(Self::end),
                             _ => todo!(),
-                        }, 
+                        },
                         UIEvent::StateChange(state) => todo!(),
                     },
 
-                    UIMessage::Element(element) => todo!(),
+                    // UIMessage::Element(element) => todo!(),
                 }
             }
-            
-            util::sleep_remaining_frame(&self.clock, &self.frame_count, &self.settings.internal_logic_refresh_rate);
+
+            util::sleep_remaining_frame(
+                &self.clock,
+                &self.frame_count,
+                &self.settings.internal_logic_refresh_rate,
+            );
         }
 
         // // TODO: Find better way for doing this. Matching against enums or something instead would be nice.

@@ -2,7 +2,6 @@ use crossbeam_channel::{self, TrySendError};
 use std::thread;
 use std::time;
 
-
 #[derive(Clone)]
 pub struct Channel<T> {
     pub sender: crossbeam_channel::Sender<T>,
@@ -26,7 +25,8 @@ pub fn period_elapsed(clock: &time::Instant, count: &u64, rate: &u16) -> bool {
 }
 
 pub fn sleep_remaining_frame(clock: &time::Instant, count: &u64, rate: &u16) {
-    let sleep_time: i128 = ((*count as i128 + 1) * *rate as i128 * 1000 - clock.elapsed().as_micros() as i128) as i128;
+    let sleep_time: i128 =
+        ((*count as i128 + 1) * *rate as i128 * 1000 - clock.elapsed().as_micros() as i128) as i128;
     if sleep_time > 0 {
         let sleep_time = time::Duration::from_micros(sleep_time as u64);
         thread::sleep(sleep_time);

@@ -3,11 +3,11 @@ use std::thread;
 use std::time;
 
 mod logic_state_machine;
-use logic_state_machine::State;
 use logic_state_machine::LogicStateMachine;
+use logic_state_machine::State;
+mod settings;
 mod ui;
 mod util;
-mod settings;
 
 fn main() {
     // Initialize state machine
