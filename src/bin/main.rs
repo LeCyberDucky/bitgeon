@@ -30,12 +30,15 @@ fn main() {
     };
 
     // Setup UI
-    let ui = thread::spawn(move || {
-        ui::UI::run(util::Channel {
-            sender: ui_tx,
-            receiver: ui_rx,
-        });
-    });
+    let ui = thread::Builder::new()
+        .name("User Interface".to_string())
+        .spawn(move || {
+            ui::UI::run(util::Channel {
+                sender: ui_tx,
+                receiver: ui_rx,
+            });
+        })
+        .unwrap();
 
     application.run();
 

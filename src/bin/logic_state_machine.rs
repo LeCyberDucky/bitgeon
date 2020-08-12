@@ -42,6 +42,24 @@ impl LogicStateMachine {
         }
     }
 
+    pub fn wait_for_input(&mut self) -> Vec<UIMessage> {
+        let mut ui_updates = vec![];
+        loop {
+            // interact with ui
+            ui_updates = self.ui.receive();
+            if ui_updates.len() > 0 {
+                break;
+            }
+
+            util::sleep_remaining_frame(
+                &self.clock,
+                &mut self.frame_count,
+                &self.settings.internal_logic_refresh_rate,
+            );
+        }
+        ui_updates
+    }
+
     pub fn add_files(&mut self) -> State {
         State(Self::send)
     }
@@ -57,53 +75,22 @@ impl LogicStateMachine {
     }
 
     pub fn home(&mut self) -> State {
-        // let ui_elements = vec![UIElement::Menu(UIMenu::new(
-        //     String::from("Choose an option:"),
-        //     vec![
-        //         String::from("Send"),
-        //         String::from("Receive"),
-        //         String::from("End"),
-        //     ],
-        // ))];
+        self.ui
+            .send(UIMessage::Event(UIEvent::StateChange(AppState::Home)));
 
-        // for element in ui_elements {
-        //     self.ui.send(UIMessage::Element(element));
-        // }
-        self.ui.send(UIMessage::Event(UIEvent::StateChange(AppState::Home)));
+        let mut ui_updates = self.wait_for_input();
 
-        loop {
-            // interact with ui
-            let ui_updates = self.ui.receive();
-
-            // TODO: Create function for interacting since this needs to be repeated in multiple states. Let it update the frame count
-            for message in ui_updates {
-                match message {
-                    UIMessage::Event(event) => match event {
-                        UIEvent::Selection(option) => match option {
-                            2 => return State(Self::end),
-                            _ => todo!(),
-                        },
-                        UIEvent::StateChange(state) => todo!(),
+        for message in ui_updates {
+            match message {
+                UIMessage::Event(event) => match event {
+                    UIEvent::Selection(selection) => match selection {
+                        2 => return State(Self::end),
+                        _ => todo!(),
                     },
-
-                    // UIMessage::Element(element) => todo!(),
-                }
+                    _ => todo!(),
+                },
             }
-
-            util::sleep_remaining_frame(
-                &self.clock,
-                &self.frame_count,
-                &self.settings.internal_logic_refresh_rate,
-            );
         }
-
-        // // TODO: Find better way for doing this. Matching against enums or something instead would be nice.
-        // match selection {
-        //     0 => State(Self::send),
-        //     1 => State(Self::receive),
-        //     2 => State(Self::end),
-        //     _ => State(Self::exit),
-        // }
 
         State(Self::end)
     }
@@ -117,13 +104,6 @@ impl LogicStateMachine {
     }
 
     pub fn send(&mut self) -> State {
-        // Logic for this state:
-        /* Continuously:
-         * - Show sending progress
-         * - Allow user to do stuff (Menu to go to different state [home, add files])
-         *
-         *
-         */
         State(Self::end)
     }
 }

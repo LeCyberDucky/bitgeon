@@ -24,11 +24,14 @@ pub fn period_elapsed(clock: &time::Instant, count: &u64, rate: &u16) -> bool {
     clock.elapsed().as_micros() >= *count as u128 * 1000 / *rate as u128 // Should we be using floating point values here?
 }
 
-pub fn sleep_remaining_frame(clock: &time::Instant, count: &u64, rate: &u16) {
-    let sleep_time: i128 =
-        ((*count as i128 + 1) * *rate as i128 * 1000 - clock.elapsed().as_micros() as i128) as i128;
-    if sleep_time > 0 {
-        let sleep_time = time::Duration::from_micros(sleep_time as u64);
+pub fn sleep_remaining_frame(clock: &time::Instant, count: &mut u64, rate: &u16) {
+    // Note: This allows catching up via a high instantaneous frame rate after a lag. Maybe lost frames should just be skipped?
+    *count += 1;
+
+    let delta_t = *count as i128 * *rate as i128 * 1000 - clock.elapsed().as_micros() as i128;
+
+    if delta_t > 0 {
+        let sleep_time = time::Duration::from_micros(delta_t as u64);
         thread::sleep(sleep_time);
     }
 }

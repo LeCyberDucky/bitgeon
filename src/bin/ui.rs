@@ -16,49 +16,8 @@ use crate::util;
 
 // Inter-process messages between ui and backend
 pub enum UIMessage {
-    // Element(UIElement),
     Event(UIEvent),
 }
-
-// pub enum UIElement {
-//     Menu(UIMenu),
-//     Info,
-//     Sending,
-//     Receiving,
-// }
-
-// pub struct UIMenu {
-//     pub heading: String,
-//     pub options: Vec<String>,
-//     pub state: ListState,
-// }
-
-// impl UIMenu {
-//     pub fn new(heading: String, options: Vec<String>) -> UIMenu {
-//         UIMenu {
-//             heading,
-//             options,
-//             state: ListState::default(),
-//         }
-//     }
-
-//     pub fn next(&mut self) {
-//         let i = match self.state.selected() {
-//             Some(i) => (i + 1) % self.options.len(),
-//             None => 0,
-//         };
-//         self.state.select(Some(i));
-//     }
-
-//     pub fn previous(&mut self) {
-//         let i = match self.state.selected() {
-//             Some(i) => (i as isize - 1).rem_euclid(self.options.len() as isize) as usize,
-//             None => 0,
-//         };
-//         self.state.select(Some(i));
-//     }
-// }
-
 
 pub struct ScrollList {
     pub heading: String,
@@ -92,8 +51,6 @@ impl ScrollList {
     }
 }
 
-
-
 pub enum UIEvent {
     Selection(usize),
     StateChange(AppState),
@@ -101,17 +58,16 @@ pub enum UIEvent {
 
 #[derive(PartialEq)]
 pub enum AppState {
-    Active,
+    Initialization,
     Home,
     End,
 }
 
-
 pub enum Scene {
-    Home(SceneHome),
     End,
+    Home(SceneHome),
+    Initialization,
 }
-
 
 pub struct SceneHome {
     menu: ScrollList,
@@ -120,25 +76,17 @@ pub struct SceneHome {
 impl SceneHome {
     pub fn new() -> SceneHome {
         SceneHome {
-            menu: ScrollList::new(String::from("Choose an option:"),
-            vec![
-                String::from("Send"),
-                String::from("Receive"),
-                String::from("End"),
-            ],)
+            menu: ScrollList::new(
+                String::from("Choose an option:"),
+                vec![
+                    String::from("Send"),
+                    String::from("Receive"),
+                    String::from("End"),
+                ],
+            ),
         }
     }
 }
-
-
-
-// #[derive(PartialEq)]
-// pub enum State {
-//     Home,
-//     End,
-// }
-
-// Separate into UI and UI data. UI will hold the state. Then, UI.draw() can take a reference to UI data.
 
 pub struct UI {
     pub application: util::Channel<UIMessage>,
@@ -149,10 +97,6 @@ pub struct UI {
     pub frame_count: u64,
     pub last_frame: time::Instant,
     pub frame_changed: bool,
-    // pub menu: UIMenu,
-    // pub info: UIElement,
-    // pub sending: UIElement,
-    // pub receiving: UIElement,
 }
 
 impl UI {
@@ -160,17 +104,13 @@ impl UI {
         // Setup
         let mut ui = UI {
             application,
-            application_state: AppState::Active,
+            application_state: AppState::Initialization,
             scene: Scene::Home(SceneHome::new()),
             ui_refresh_rate: 60,
             clock: time::Instant::now(),
             frame_count: 0,
             last_frame: time::Instant::now(),
             frame_changed: false,
-            // menu: UIMenu::new(String::new(), vec![]),
-            // info: UIElement::Info,
-            // sending: UIElement::Sending,
-            // receiving: UIElement::Receiving,
         };
 
         crossterm::terminal::enable_raw_mode();
@@ -178,20 +118,16 @@ impl UI {
         io::stdout().execute(crossterm::cursor::Hide);
         let mut terminal = tui::Terminal::new(CrosstermBackend::new(io::stdout())).unwrap();
 
-        // https://stackoverflow.com/questions/32554285/compare-enums-only-by-variant-not-value
-        while std::mem::discriminant(&ui.scene)
-            != std::mem::discriminant(&Scene::End)
-        {
+        while std::mem::discriminant(&ui.scene) != std::mem::discriminant(&Scene::End) {
             ui.update();
-            if ui.frame_elapsed() {
-                ui.frame_count += 1;
-                if ui.frame_changed {
-                    // Visual change necessitates redraw
-                    ui.frame_changed = false;
-                    ui.draw(&mut terminal);
-                }
-                ui.interact(); // User interaction
+            if ui.frame_changed {
+                // Visual change necessitates redraw
+                ui.frame_changed = false;
+                ui.draw(&mut terminal);
             }
+            ui.interact(); // User interaction
+
+            util::sleep_remaining_frame(&ui.clock, &mut ui.frame_count, &ui.ui_refresh_rate);
         }
 
         // Reset terminal to initial state
@@ -249,7 +185,6 @@ impl UI {
                             f.render_stateful_widget(menu, split_vertical[0], &mut data.menu.state);
                         }
 
-
                         let info = Block::default().title("Info").borders(Borders::ALL);
                         f.render_widget(info, split_horizontal[1]);
 
@@ -300,23 +235,21 @@ impl UI {
                     _ => todo!(),
                 },
                 // TODO: Not everything should be sent to the application thread.
-                // event::Event::Key(event) => self.application.send(UIMessage::Event(UIEvent::KeyPress(event))).unwrap(),
-                // _ => todo!(),
-                // _ => todo!()
-                _ => todo!(),
+                _ => (),
             }
         }
     }
 
-    // pub fn period_elapsed(&self, count: &u64, rate: &u16) -> bool {
-    //     self.clock.elapsed().as_micros() >= *count as u128 * 1000 / *rate as u128 // Should we be using floating point values here?
-    // }
-
-    pub fn frame_elapsed(&self) -> bool {
-        // self.period_elapsed(&self.frame_count, &self.ui_refresh_rate)
-        util::period_elapsed(&self.clock, &self.frame_count, &self.ui_refresh_rate)
+    
+    pub fn period_elapsed(&self, count: &u64, rate: &u16) -> bool {
+        self.clock.elapsed().as_micros() >= *count as u128 * 1000 / *rate as u128 // Should we be using floating point values here?
     }
 
+    // pub fn frame_elapsed(&self) -> bool {
+    //     // self.period_elapsed(&self.frame_count, &self.ui_refresh_rate)
+    //     util::period_elapsed(&self.clock, &self.frame_count, &self.ui_refresh_rate)
+    // }
+    
     pub fn update(&mut self) {
         // Get updates from logic of the program. Progress for progress bars for example
         let app_updates = self.application.receive();
@@ -324,23 +257,24 @@ impl UI {
         if app_updates.len() > 0 {
             for message in app_updates {
                 match message {
-                    // UIMessage::Element(element) => match element {
-                    //     UIElement::Menu(menu) => self.menu = menu,
-                    //     UIElement::Receiving => todo!(),
-                    //     UIElement::Sending => todo!(),
-                    //     UIElement::Info => todo!(),
-                    // },
                     UIMessage::Event(event) => match event {
-                        UIEvent::StateChange(state) => self.application_state = state,
+                        UIEvent::StateChange(state) => {
+                            self.application_state = state;
+                            self.scene = match &self.application_state {
+                                AppState::Home => Scene::Home(SceneHome::new()),
+                                AppState::End => Scene::End,
+                                AppState::Initialization => todo!(),
+                            }
+                        }
                         UIEvent::Selection(option) => unimplemented!(),
                     },
                 }
             }
 
-            // TODO: Update scene
-            match self.application_state {
-                _ => todo!()
-            }
+            // // TODO: Update scene
+            // match self.application_state {
+            //     AppState::Home =>
+            // }
 
             // self.scene = match self.application_state {
             //     AppState::Active => self.scene,
