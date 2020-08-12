@@ -61,7 +61,17 @@ impl LogicStateMachine {
     }
 
     pub fn add_files(&mut self) -> State {
-        State(Self::send)
+        self.ui.send(UIMessage::Event(UIEvent::StateChange(AppState::AddFiles)));
+
+        let mut ui_updates = self.wait_for_input();
+
+        // for message in ui_updates {
+        //     match message {
+        //         UIMessage::UserInput()
+        //     }
+        // }
+
+        State(Self::home)
     }
 
     pub fn end(&mut self) -> State {
@@ -75,8 +85,7 @@ impl LogicStateMachine {
     }
 
     pub fn home(&mut self) -> State {
-        self.ui
-            .send(UIMessage::Event(UIEvent::StateChange(AppState::Home)));
+        self.ui.send(UIMessage::Event(UIEvent::StateChange(AppState::Home)));
 
         let mut ui_updates = self.wait_for_input();
 
@@ -84,6 +93,8 @@ impl LogicStateMachine {
             match message {
                 UIMessage::Event(event) => match event {
                     UIEvent::Selection(selection) => match selection {
+                        0 => return State(Self::add_files),
+                        1 => return State(Self::receive),
                         2 => return State(Self::end),
                         _ => todo!(),
                     },
@@ -100,10 +111,6 @@ impl LogicStateMachine {
     }
 
     pub fn receive(&mut self) -> State {
-        State(Self::end)
-    }
-
-    pub fn send(&mut self) -> State {
-        State(Self::end)
+        State(Self::home)
     }
 }

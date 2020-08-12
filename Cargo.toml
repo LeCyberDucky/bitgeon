@@ -8,6 +8,6 @@ edition = "2018"
 
 [dependencies]
 crossbeam-channel = "0.4.2"
-tui = { version = "0.9.1", default-features = false, features = ['crossterm'] }
+tui = { version = "0.10.0", default-features = false, features = ['crossterm'] }
 crossterm = "0.17.3"
 argh = "0.1.3"

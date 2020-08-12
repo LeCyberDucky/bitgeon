@@ -7,9 +7,10 @@ use std::time;
 use tui::{
     self,
     backend::CrosstermBackend,
-    layout::{Constraint, Direction, Layout},
+    layout::{Constraint, Direction, Layout, Alignment},
     style,
-    widgets::{Block, Borders, List, ListState, StatefulWidget, Text, Widget},
+    text::{Span, Text},
+    widgets::{Block, Borders, List, ListItem, ListState, Paragraph, StatefulWidget, Widget, Wrap},
 };
 
 use crate::util;
@@ -58,28 +59,43 @@ pub enum UIEvent {
 
 #[derive(PartialEq)]
 pub enum AppState {
-    Initialization,
-    Home,
+    AddFiles,
     End,
+    Home,
+    Initialization,
 }
 
 pub enum Scene {
+    AddFiles(SceneAddFiles),
     End,
     Home(SceneHome),
     Initialization,
 }
 
+pub struct SceneAddFiles {
+    input: Vec<char>,
+    file_paths: ScrollList,
+}
+
+impl SceneAddFiles {
+    pub fn new() -> SceneAddFiles {
+        SceneAddFiles {
+            input: vec![],
+            file_paths: ScrollList::new(String::from(""), vec![]),
+        }
+    }
+}
+
 pub struct SceneHome {
     menu: ScrollList,
 }
-
 impl SceneHome {
     pub fn new() -> SceneHome {
         SceneHome {
             menu: ScrollList::new(
                 String::from("Choose an option:"),
                 vec![
-                    String::from("Send"),
+                    String::from("Add files"),
                     String::from("Receive"),
                     String::from("End"),
                 ],
@@ -138,6 +154,53 @@ impl UI {
 
     pub fn draw(&mut self, terminal: &mut tui::Terminal<CrosstermBackend<io::Stdout>>) {
         match self.scene {
+            Scene::AddFiles(_) => {
+                terminal
+                    .draw(|mut f| {
+                        // Drag and drop files or directories to this window or type their path
+                        let split_horizontal = Layout::default()
+                            .direction(Direction::Vertical)
+                            .margin(1)
+                            .constraints(
+                                [Constraint::Percentage(25), Constraint::Percentage(75)].as_ref(),
+                            )
+                            .split(f.size());
+
+                        let style = style::Style::default();
+
+                        if let Scene::AddFiles(data) = &mut self.scene {
+                            let input: String = data.input.iter().collect();
+                            let input = Span::raw(input);
+
+                            let input = Paragraph::new(input)
+                                .block(Block::default().title("").borders(Borders::NONE))
+                                .alignment(Alignment::Left)
+                                .wrap(Wrap{trim: true});
+                            f.render_widget(input, split_horizontal[0]);
+
+                            let file_paths: Vec<ListItem> = data.file_paths.options.iter().map(|i| ListItem::new(i.as_ref())).collect();
+                            let file_paths = List::new(file_paths)
+                                .block(Block::default().borders(Borders::ALL).title("Files"))
+                                .style(style)
+                                .highlight_style(
+                                    style
+                                        .fg(style::Color::Rgb(253, 3, 166))
+                                        .add_modifier(style::Modifier::BOLD),
+                                )
+                                .highlight_symbol("> ");
+                            // f.render_widget(menu_frame, split_vertical[0]);
+                            f.render_stateful_widget(file_paths, split_horizontal[1], &mut data.file_paths.state);
+                        }
+
+                        let top = Block::default().title("").borders(Borders::ALL);
+                        f.render_widget(top, split_horizontal[0]);
+
+                        let bottom = Block::default().title("").borders(Borders::ALL);
+                        f.render_widget(bottom, split_horizontal[1]);
+                    })
+                    .unwrap();
+            }
+
             Scene::Home(_) => {
                 terminal
                     .draw(|mut f| {
@@ -172,13 +235,14 @@ impl UI {
                         let style = style::Style::default();
 
                         if let Scene::Home(data) = &mut self.scene {
-                            let menu = List::new(data.menu.options.iter().map(Text::raw))
+                            let menu: Vec<ListItem> = data.menu.options.iter().map(|i| ListItem::new(i.as_ref())).collect();
+                            let menu = List::new(menu)
                                 .block(Block::default().borders(Borders::ALL).title("Menu"))
                                 .style(style)
                                 .highlight_style(
                                     style
                                         .fg(style::Color::Rgb(253, 3, 166))
-                                        .modifier(style::Modifier::BOLD),
+                                        .add_modifier(style::Modifier::BOLD),
                                 )
                                 .highlight_symbol("> ");
                             // f.render_widget(menu_frame, split_vertical[0]);
@@ -201,55 +265,43 @@ impl UI {
     }
 
     pub fn interact(&mut self) {
+        let mut frame_changed = true;
+
         if event::poll(time::Duration::from_secs(0)).unwrap() {
-            match event::read().unwrap() {
-                event::Event::Key(event) => match event.code {
-                    event::KeyCode::Up => match &mut self.scene {
-                        Scene::Home(data) => {
-                            self.frame_changed = true;
-                            data.menu.previous();
+            match &mut self.scene {
+                Scene::AddFiles(data) => {
+                    match event::read().unwrap() {
+                        event::Event::Key(event) => match event.code {
+                            event::KeyCode::Char(character) => data.input.push(character),
+                            _ => todo!(),
                         }
-                        _ => (),
-                    }, // TODO: Whether this makes sense might depend on the state of the app. Not sure if I like this
-                    event::KeyCode::Down => match &mut self.scene {
-                        Scene::Home(data) => {
-                            self.frame_changed = true;
-                            data.menu.next()
-                        }
-                        _ => (),
-                    }, // TODO: What if we have no options?
-                    event::KeyCode::Enter => match &mut self.scene {
-                        Scene::Home(data) => {
-                            self.frame_changed = true;
-                            match data.menu.state.selected() {
+                        _ => frame_changed = self.frame_changed,
+                    }
+                },
+
+                Scene::Home(data) => {
+                    match event::read().unwrap() {
+                        event::Event::Key(event) => match event.code {
+                            event::KeyCode::Up => data.menu.previous(),
+                            event::KeyCode::Down => data.menu.next(),
+                            event::KeyCode::Enter => match data.menu.state.selected() {
                                 Some(option) => {
                                     self.application
                                         .send(UIMessage::Event(UIEvent::Selection(option)));
                                 }
                                 None => (),
-                            }
-                        }
-                        _ => (),
-                    },
-                    event::KeyCode::Esc => todo!(),
-                    _ => todo!(),
-                },
-                // TODO: Not everything should be sent to the application thread.
-                _ => (),
+                            },
+                            _ => todo!(),
+                        },
+                        _ => frame_changed = self.frame_changed, // This is weird some kind of events trigger without user interaction, I guess...
+                    }
+                }
+                _ => todo!(),
             }
         }
+        self.frame_changed = frame_changed;
     }
 
-    
-    pub fn period_elapsed(&self, count: &u64, rate: &u16) -> bool {
-        self.clock.elapsed().as_micros() >= *count as u128 * 1000 / *rate as u128 // Should we be using floating point values here?
-    }
-
-    // pub fn frame_elapsed(&self) -> bool {
-    //     // self.period_elapsed(&self.frame_count, &self.ui_refresh_rate)
-    //     util::period_elapsed(&self.clock, &self.frame_count, &self.ui_refresh_rate)
-    // }
-    
     pub fn update(&mut self) {
         // Get updates from logic of the program. Progress for progress bars for example
         let app_updates = self.application.receive();
@@ -261,8 +313,9 @@ impl UI {
                         UIEvent::StateChange(state) => {
                             self.application_state = state;
                             self.scene = match &self.application_state {
-                                AppState::Home => Scene::Home(SceneHome::new()),
+                                AppState::AddFiles => Scene::AddFiles(SceneAddFiles::new()),
                                 AppState::End => Scene::End,
+                                AppState::Home => Scene::Home(SceneHome::new()),
                                 AppState::Initialization => todo!(),
                             }
                         }
@@ -270,19 +323,17 @@ impl UI {
                     },
                 }
             }
-
-            // // TODO: Update scene
-            // match self.application_state {
-            //     AppState::Home =>
-            // }
-
-            // self.scene = match self.application_state {
-            //     AppState::Active => self.scene,
-            //     AppState::End => Scene::End,
-            //     AppState::Home => todo!(),
-            // };
-
             self.frame_changed = true;
         }
     }
+
+    pub fn period_elapsed(&self, count: &u64, rate: &u16) -> bool {
+        self.clock.elapsed().as_micros() >= *count as u128 * 1000 / *rate as u128
+        // Should we be using floating point values here?
+    }
+
+    // pub fn frame_elapsed(&self) -> bool {
+    //     // self.period_elapsed(&self.frame_count, &self.ui_refresh_rate)
+    //     util::period_elapsed(&self.clock, &self.frame_count, &self.ui_refresh_rate)
+    // }
 }
