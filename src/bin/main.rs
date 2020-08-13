@@ -25,7 +25,7 @@ fn main() {
         settings: settings::Settings {
             interface_refresh_rate: 60,
             progress_refresh_rate: 4,
-            internal_logic_refresh_rate: 200,
+            internal_logic_refresh_rate: 60,
         },
     };
 

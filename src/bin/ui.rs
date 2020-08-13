@@ -7,7 +7,7 @@ use std::time;
 use tui::{
     self,
     backend::CrosstermBackend,
-    layout::{Constraint, Direction, Layout, Alignment},
+    layout::{Alignment, Constraint, Direction, Layout},
     style,
     text::{Span, Text},
     widgets::{Block, Borders, List, ListItem, ListState, Paragraph, StatefulWidget, Widget, Wrap},
@@ -175,10 +175,15 @@ impl UI {
                             let input = Paragraph::new(input)
                                 .block(Block::default().title("").borders(Borders::NONE))
                                 .alignment(Alignment::Left)
-                                .wrap(Wrap{trim: true});
+                                .wrap(Wrap { trim: true });
                             f.render_widget(input, split_horizontal[0]);
 
-                            let file_paths: Vec<ListItem> = data.file_paths.options.iter().map(|i| ListItem::new(i.as_ref())).collect();
+                            let file_paths: Vec<ListItem> = data
+                                .file_paths
+                                .options
+                                .iter()
+                                .map(|i| ListItem::new(i.as_ref()))
+                                .collect();
                             let file_paths = List::new(file_paths)
                                 .block(Block::default().borders(Borders::ALL).title("Files"))
                                 .style(style)
@@ -189,7 +194,11 @@ impl UI {
                                 )
                                 .highlight_symbol("> ");
                             // f.render_widget(menu_frame, split_vertical[0]);
-                            f.render_stateful_widget(file_paths, split_horizontal[1], &mut data.file_paths.state);
+                            f.render_stateful_widget(
+                                file_paths,
+                                split_horizontal[1],
+                                &mut data.file_paths.state,
+                            );
                         }
 
                         let top = Block::default().title("").borders(Borders::ALL);
@@ -235,7 +244,12 @@ impl UI {
                         let style = style::Style::default();
 
                         if let Scene::Home(data) = &mut self.scene {
-                            let menu: Vec<ListItem> = data.menu.options.iter().map(|i| ListItem::new(i.as_ref())).collect();
+                            let menu: Vec<ListItem> = data
+                                .menu
+                                .options
+                                .iter()
+                                .map(|i| ListItem::new(i.as_ref()))
+                                .collect();
                             let menu = List::new(menu)
                                 .block(Block::default().borders(Borders::ALL).title("Menu"))
                                 .style(style)
@@ -269,14 +283,18 @@ impl UI {
 
         if event::poll(time::Duration::from_secs(0)).unwrap() {
             match &mut self.scene {
-                Scene::AddFiles(data) => {
-                    match event::read().unwrap() {
-                        event::Event::Key(event) => match event.code {
-                            event::KeyCode::Char(character) => data.input.push(character),
-                            _ => todo!(),
+                Scene::AddFiles(data) => match event::read().unwrap() {
+                    event::Event::Key(event) => match event.code {
+                        event::KeyCode::Char(character) => {
+                            if character == 'â' {
+                                data.input.push('\\');
+                            } else {
+                                data.input.push(character)
+                            }
                         }
-                        _ => frame_changed = self.frame_changed,
-                    }
+                        _ => todo!(),
+                    },
+                    _ => frame_changed = self.frame_changed,
                 },
 
                 Scene::Home(data) => {

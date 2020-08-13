@@ -28,7 +28,8 @@ pub fn sleep_remaining_frame(clock: &time::Instant, count: &mut u64, rate: &u16)
     // Note: This allows catching up via a high instantaneous frame rate after a lag. Maybe lost frames should just be skipped?
     *count += 1;
 
-    let delta_t = (*count as f64 / *rate as f64 * 1000f64) as i128 - clock.elapsed().as_micros() as i128;
+    let delta_t =
+        (*count as f64 / *rate as f64 * 1000f64) as i128 - clock.elapsed().as_micros() as i128;
 
     if delta_t > 0 {
         let sleep_time = time::Duration::from_micros(delta_t as u64);

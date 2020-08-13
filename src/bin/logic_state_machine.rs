@@ -61,7 +61,8 @@ impl LogicStateMachine {
     }
 
     pub fn add_files(&mut self) -> State {
-        self.ui.send(UIMessage::Event(UIEvent::StateChange(AppState::AddFiles)));
+        self.ui
+            .send(UIMessage::Event(UIEvent::StateChange(AppState::AddFiles)));
 
         let mut ui_updates = self.wait_for_input();
 
@@ -85,7 +86,8 @@ impl LogicStateMachine {
     }
 
     pub fn home(&mut self) -> State {
-        self.ui.send(UIMessage::Event(UIEvent::StateChange(AppState::Home)));
+        self.ui
+            .send(UIMessage::Event(UIEvent::StateChange(AppState::Home)));
 
         let mut ui_updates = self.wait_for_input();
 
