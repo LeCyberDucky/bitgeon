@@ -1,4 +1,3 @@
-// TODO: UI should also be state machine. Or should it? Pseudo state machine maybe.
 use crossterm::{self, event, ExecutableCommand};
 
 use std::io;
@@ -13,7 +12,9 @@ use tui::{
     widgets::{Block, Borders, List, ListItem, ListState, Paragraph, StatefulWidget, Widget, Wrap},
 };
 
+use crate::file_processing;
 use crate::util;
+use file_processing::PathState;
 
 // Inter-process messages between ui and backend
 pub enum UIMessage {
@@ -52,6 +53,208 @@ impl ScrollList {
     }
 }
 
+pub struct StyledFilePath {
+    path: String,
+    display_path: String,
+    state: PathState,
+}
+
+impl StyledFilePath {
+    // TODO: Fix item count in directories
+    pub fn new(path: &str) -> StyledFilePath {
+        StyledFilePath {
+            path: path.to_string(),
+            display_path: path.to_string(),
+            state: PathState::Unchecked,
+        }
+    }
+
+    pub fn deselect(&mut self) {
+        // TODO: Deselection stuff
+    }
+
+    pub fn edit(&mut self, key: &event::KeyCode) {
+        match key {
+            event::KeyCode::Backspace => {
+                self.path.pop();
+            }
+            event::KeyCode::Char(character) => {
+                let sanitized_character = match *character {
+                    'â' => '\\',
+                    _ => *character,
+                };
+                self.path.push(sanitized_character);
+            }
+            _ => (),
+        }
+        if self.state != PathState::Unchecked {
+            self.state = PathState::Unchecked;
+        }
+        self.select();
+    }
+
+    pub fn select(&mut self) {
+        self.display_path = "   ".to_string(); // Padding spaces to account for emojis of other strings
+        self.display_path.push_str(&self.path);
+    }
+
+    pub fn validate(&mut self) {
+        self.state = file_processing::check_path(&self.path);
+    }
+
+    // TODO: Rename this to style. Validation is done elsewhere.
+    pub fn style(&mut self) {
+        // Update display_path
+        self.display_path = self.path.clone();
+        match self.state {
+            PathState::Directory(count) => {
+                self.display_path.insert_str(0, "✔  ");
+                match count {
+                    1 => self.display_path.push_str(" | 1 Accessible item"),
+                    _ => self
+                        .display_path
+                        .push_str(&format!(" | {} Accessible items", count)),
+                }
+            }
+            PathState::File => self.display_path.insert_str(0, "✔  "),
+            PathState::Invalid => self.display_path.insert_str(0, "❌ "),
+            _ => (),
+        }
+    }
+}
+
+pub struct StyledPathList {
+    heading: String,
+    paths: Vec<StyledFilePath>,
+    state: ListState,
+}
+
+impl StyledPathList {
+    pub fn new(heading: String, paths: Vec<StyledFilePath>) -> StyledPathList {
+        StyledPathList {
+            heading,
+            paths,
+            state: ListState::default(),
+        }
+    }
+
+    pub fn edit_selected(&mut self, key: &event::KeyCode) {
+        match key {
+            event::KeyCode::Backspace | event::KeyCode::Char(_) => {
+                if let Some(index) = self.state.selected() {
+                    self.paths[index].edit(key);
+                }
+            }
+            event::KeyCode::Delete => {
+                // Delete current entry. Make sure not to select something invalid
+                if let Some(mut index) = self.state.selected() {
+                    self.paths.remove(index);
+                    match self.paths.len() {
+                        0 => self.paths.push(StyledFilePath::new("")),
+                        _ => (),
+                    }
+                    if index >= self.paths.len() {
+                        index -= 1;
+                    }
+                    self.state.select(Some(index));
+                    self.paths[index].select();
+                }
+            }
+            event::KeyCode::Down => {
+                self.parse_selected();
+                self.next();
+            }
+            event::KeyCode::Enter => {
+                if let Some(index) = self.state.selected() {
+                    self.parse_selected();
+                    let mut new_element = StyledFilePath::new("");
+                    new_element.style();
+                    self.paths.insert(index, new_element);
+                    self.paths[index].select();
+                }
+            }
+            event::KeyCode::Up => {
+                self.parse_selected();
+                self.previous();
+            }
+            _ => (),
+        }
+    }
+
+    pub fn get_styled_paths(&self) -> Vec<String> {
+        self.paths
+            .iter()
+            .map(|path| path.display_path.clone())
+            .collect()
+    }
+
+    pub fn next(&mut self) {
+        let mut offset = 1;
+        let i = match self.state.selected() {
+            Some(i) => {
+                if self.paths[i].state == PathState::Unchecked {
+                    offset += self.parse_selected();
+                } else {
+                    self.paths[i].deselect();
+                }
+                (i + offset) % self.paths.len()
+            }
+            None => 0,
+        };
+        self.state.select(Some(i));
+        self.paths[i].select();
+    }
+
+    pub fn parse_selected(&mut self) -> usize {
+        let index = self.state.selected().unwrap();
+        let mut parsed_paths = file_processing::parse_paths(&self.paths[index].path);
+        let mut new_path_count = parsed_paths.len();
+
+        if new_path_count == 0 {
+            parsed_paths.push(String::from(""));
+            new_path_count = 1;
+        }
+
+        let new_paths: Vec<StyledFilePath> = parsed_paths
+            .iter()
+            .map(|path| {
+                let mut styled_path = StyledFilePath::new(path);
+                styled_path.validate();
+                styled_path.style();
+                styled_path
+            })
+            .collect();
+
+        // Replace selected element with parsed elements
+        self.paths.splice(index..index + 1, new_paths);
+
+        new_path_count - 1
+    }
+
+    pub fn previous(&mut self) {
+        let i = match self.state.selected() {
+            Some(i) => {
+                if self.paths[i].state == PathState::Unchecked {
+                    self.parse_selected();
+                } else {
+                    self.paths[i].deselect();
+                }
+                (i as isize - 1).rem_euclid(self.paths.len() as isize) as usize
+            }
+            None => 0,
+        };
+        self.state.select(Some(i));
+        self.paths[i].select();
+    }
+
+    pub fn selected(&mut self) -> Option<&mut StyledFilePath> {
+        if let Some(index) = self.state.selected() {
+            return Some(&mut self.paths[index]);
+        }
+        None
+    }
+}
+
 pub enum UIEvent {
     Selection(usize),
     StateChange(AppState),
@@ -74,15 +277,22 @@ pub enum Scene {
 
 pub struct SceneAddFiles {
     input: Vec<char>,
-    file_paths: ScrollList,
+    file_paths: StyledPathList,
 }
 
 impl SceneAddFiles {
     pub fn new() -> SceneAddFiles {
-        SceneAddFiles {
+        let mut scene = SceneAddFiles {
             input: vec![],
-            file_paths: ScrollList::new(String::from(""), vec![]),
-        }
+            file_paths: StyledPathList::new(
+                String::from(
+                    "Edit paths below, or simply drag and drop files or directories here:",
+                ),
+                vec![StyledFilePath::new("")],
+            ),
+        };
+        scene.file_paths.next();
+        scene
     }
 }
 
@@ -157,30 +367,11 @@ impl UI {
             Scene::AddFiles(_) => {
                 terminal
                     .draw(|mut f| {
-                        // Drag and drop files or directories to this window or type their path
-                        let split_horizontal = Layout::default()
-                            .direction(Direction::Vertical)
-                            .margin(1)
-                            .constraints(
-                                [Constraint::Percentage(25), Constraint::Percentage(75)].as_ref(),
-                            )
-                            .split(f.size());
-
                         let style = style::Style::default();
 
                         if let Scene::AddFiles(data) = &mut self.scene {
-                            let input: String = data.input.iter().collect();
-                            let input = Span::raw(input);
-
-                            let input = Paragraph::new(input)
-                                .block(Block::default().title("").borders(Borders::NONE))
-                                .alignment(Alignment::Left)
-                                .wrap(Wrap { trim: true });
-                            f.render_widget(input, split_horizontal[0]);
-
-                            let file_paths: Vec<ListItem> = data
-                                .file_paths
-                                .options
+                            let styled_paths = data.file_paths.get_styled_paths();
+                            let file_paths: Vec<ListItem> = styled_paths
                                 .iter()
                                 .map(|i| ListItem::new(i.as_ref()))
                                 .collect();
@@ -196,16 +387,13 @@ impl UI {
                             // f.render_widget(menu_frame, split_vertical[0]);
                             f.render_stateful_widget(
                                 file_paths,
-                                split_horizontal[1],
+                                f.size(),
                                 &mut data.file_paths.state,
                             );
                         }
 
-                        let top = Block::default().title("").borders(Borders::ALL);
-                        f.render_widget(top, split_horizontal[0]);
-
-                        let bottom = Block::default().title("").borders(Borders::ALL);
-                        f.render_widget(bottom, split_horizontal[1]);
+                        let block = Block::default().borders(Borders::ALL);
+                        f.render_widget(block, f.size());
                     })
                     .unwrap();
             }
@@ -237,9 +425,6 @@ impl UI {
                                 [Constraint::Percentage(50), Constraint::Percentage(50)].as_ref(),
                             )
                             .split(split_vertical[1]);
-
-                        // Widgets
-                        // let menu_frame = Block::default().title("Menu").borders(Borders::ALL);
 
                         let style = style::Style::default();
 
@@ -284,16 +469,8 @@ impl UI {
         if event::poll(time::Duration::from_secs(0)).unwrap() {
             match &mut self.scene {
                 Scene::AddFiles(data) => match event::read().unwrap() {
-                    event::Event::Key(event) => match event.code {
-                        event::KeyCode::Char(character) => {
-                            if character == 'â' {
-                                data.input.push('\\');
-                            } else {
-                                data.input.push(character)
-                            }
-                        }
-                        _ => todo!(),
-                    },
+                    event::Event::Key(event) => data.file_paths.edit_selected(&event.code),
+                    _ => todo!(),
                     _ => frame_changed = self.frame_changed,
                 },
 
