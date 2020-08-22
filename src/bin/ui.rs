@@ -1,4 +1,4 @@
-use crossterm::{self, event, ExecutableCommand};
+use crossterm::{self, event::{self, KeyCode}, ExecutableCommand};
 
 use std::io;
 use std::time;
@@ -18,8 +18,19 @@ use file_processing::PathState;
 
 // Inter-process messages between ui and backend
 pub enum UIMessage {
+    Data(UIData),
     Event(UIEvent),
 }
+
+pub enum UIData {
+    file_path_list(StyledPathList),
+}
+
+pub enum UIEvent {
+    Selection(usize),
+    StateChange(AppState),
+}
+
 
 pub struct ScrollList {
     pub heading: String,
@@ -53,6 +64,7 @@ impl ScrollList {
     }
 }
 
+#[derive(Clone)]
 pub struct StyledFilePath {
     path: String,
     display_path: String,
@@ -73,12 +85,12 @@ impl StyledFilePath {
         // TODO: Deselection stuff
     }
 
-    pub fn edit(&mut self, key: &event::KeyCode) {
+    pub fn edit(&mut self, key: &KeyCode) {
         match key {
-            event::KeyCode::Backspace => {
+            KeyCode::Backspace => {
                 self.path.pop();
             }
-            event::KeyCode::Char(character) => {
+            KeyCode::Char(character) => {
                 let sanitized_character = match *character {
                     'â' => '\\',
                     _ => *character,
@@ -97,11 +109,7 @@ impl StyledFilePath {
         self.display_path = "   ".to_string(); // Padding spaces to account for emojis of other strings
         self.display_path.push_str(&self.path);
     }
-
-    pub fn validate(&mut self) {
-        self.state = file_processing::check_path(&self.path);
-    }
-
+    
     // TODO: Rename this to style. Validation is done elsewhere.
     pub fn style(&mut self) {
         // Update display_path
@@ -112,8 +120,8 @@ impl StyledFilePath {
                 match count {
                     1 => self.display_path.push_str(" | 1 Accessible item"),
                     _ => self
-                        .display_path
-                        .push_str(&format!(" | {} Accessible items", count)),
+                    .display_path
+                    .push_str(&format!(" | {} Accessible items", count)),
                 }
             }
             PathState::File => self.display_path.insert_str(0, "✔  "),
@@ -121,8 +129,13 @@ impl StyledFilePath {
             _ => (),
         }
     }
+
+    pub fn validate(&mut self) {
+        self.state = file_processing::check_path(&self.path);
+    }
 }
 
+#[derive(Clone)]
 pub struct StyledPathList {
     heading: String,
     paths: Vec<StyledFilePath>,
@@ -138,14 +151,14 @@ impl StyledPathList {
         }
     }
 
-    pub fn edit_selected(&mut self, key: &event::KeyCode) {
+    pub fn edit_selected(&mut self, key: &KeyCode) {
         match key {
-            event::KeyCode::Backspace | event::KeyCode::Char(_) => {
+            KeyCode::Backspace | KeyCode::Char(_) => {
                 if let Some(index) = self.state.selected() {
                     self.paths[index].edit(key);
                 }
             }
-            event::KeyCode::Delete => {
+            KeyCode::Delete => {
                 // Delete current entry. Make sure not to select something invalid
                 if let Some(mut index) = self.state.selected() {
                     self.paths.remove(index);
@@ -160,11 +173,11 @@ impl StyledPathList {
                     self.paths[index].select();
                 }
             }
-            event::KeyCode::Down => {
+            KeyCode::Down => {
                 self.parse_selected();
                 self.next();
             }
-            event::KeyCode::Enter => {
+            KeyCode::Enter => {
                 if let Some(index) = self.state.selected() {
                     self.parse_selected();
                     let mut new_element = StyledFilePath::new("");
@@ -173,12 +186,19 @@ impl StyledPathList {
                     self.paths[index].select();
                 }
             }
-            event::KeyCode::Up => {
+            KeyCode::Up => {
                 self.parse_selected();
                 self.previous();
             }
             _ => (),
         }
+    }
+
+    pub fn export(&mut self) -> StyledPathList {
+        // Making sure that everything is parsed and checked before exporting
+        self.previous();
+        self.next();
+        self.clone()
     }
 
     pub fn get_styled_paths(&self) -> Vec<String> {
@@ -255,14 +275,9 @@ impl StyledPathList {
     }
 }
 
-pub enum UIEvent {
-    Selection(usize),
-    StateChange(AppState),
-}
 
-#[derive(PartialEq)]
 pub enum AppState {
-    AddFiles,
+    AddFiles(StyledPathList),
     End,
     Home,
     Initialization,
@@ -281,15 +296,10 @@ pub struct SceneAddFiles {
 }
 
 impl SceneAddFiles {
-    pub fn new() -> SceneAddFiles {
+    pub fn new(file_paths: StyledPathList) -> SceneAddFiles {
         let mut scene = SceneAddFiles {
             input: vec![],
-            file_paths: StyledPathList::new(
-                String::from(
-                    "Edit paths below, or simply drag and drop files or directories here:",
-                ),
-                vec![StyledFilePath::new("")],
-            ),
+            file_paths,
         };
         scene.file_paths.next();
         scene
@@ -469,7 +479,15 @@ impl UI {
         if event::poll(time::Duration::from_secs(0)).unwrap() {
             match &mut self.scene {
                 Scene::AddFiles(data) => match event::read().unwrap() {
-                    event::Event::Key(event) => data.file_paths.edit_selected(&event.code),
+                    event::Event::Key(event) => match event.code {
+                        KeyCode::Backspace | KeyCode::Char(_) | KeyCode::Delete | 
+                        KeyCode::Down      | KeyCode::Enter   | KeyCode::Up
+                             => data.file_paths.edit_selected(&event.code),
+                        KeyCode::Esc => {
+                            self.application.send(UIMessage::Data(UIData::file_path_list(data.file_paths.clone())));
+                        },
+                        _ => (),
+                    } ,
                     _ => todo!(),
                     _ => frame_changed = self.frame_changed,
                 },
@@ -477,9 +495,9 @@ impl UI {
                 Scene::Home(data) => {
                     match event::read().unwrap() {
                         event::Event::Key(event) => match event.code {
-                            event::KeyCode::Up => data.menu.previous(),
-                            event::KeyCode::Down => data.menu.next(),
-                            event::KeyCode::Enter => match data.menu.state.selected() {
+                            KeyCode::Up => data.menu.previous(),
+                            KeyCode::Down => data.menu.next(),
+                            KeyCode::Enter => match data.menu.state.selected() {
                                 Some(option) => {
                                     self.application
                                         .send(UIMessage::Event(UIEvent::Selection(option)));
@@ -508,7 +526,7 @@ impl UI {
                         UIEvent::StateChange(state) => {
                             self.application_state = state;
                             self.scene = match &self.application_state {
-                                AppState::AddFiles => Scene::AddFiles(SceneAddFiles::new()),
+                                AppState::AddFiles(file_list) => Scene::AddFiles(SceneAddFiles::new(file_list.to_owned())),
                                 AppState::End => Scene::End,
                                 AppState::Home => Scene::Home(SceneHome::new()),
                                 AppState::Initialization => todo!(),
@@ -516,6 +534,7 @@ impl UI {
                         }
                         UIEvent::Selection(option) => unimplemented!(),
                     },
+                    _ => todo!(),
                 }
             }
             self.frame_changed = true;

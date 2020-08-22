@@ -8,6 +8,7 @@ use logic_state_machine::LogicStateMachine;
 use logic_state_machine::State;
 mod settings;
 mod ui;
+use ui::{StyledFilePath, StyledPathList};
 mod util;
 
 fn main() {
@@ -28,6 +29,12 @@ fn main() {
             progress_refresh_rate: 4,
             internal_logic_refresh_rate: 60,
         },
+        files_for_transmission: StyledPathList::new(
+            String::from(
+                "Edit paths below, or simply drag and drop files or directories here:",
+            ),
+            vec![StyledFilePath::new("")],
+        ),
     };
 
     // Setup UI

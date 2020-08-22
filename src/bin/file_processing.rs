@@ -3,9 +3,9 @@ use lazy_static::lazy_static;
 use path_absolutize::*;
 use std::fs::OpenOptions;
 use std::path::Path;
-use walkdir::WalkDir;
+use walkdir::{DirEntry, WalkDir};
 
-#[derive(PartialEq)]
+#[derive(Clone, PartialEq)]
 pub enum PathState {
     Directory(usize), // Holds number of files in directory
     File,
@@ -77,14 +77,27 @@ pub fn check_path(path_string: &str) -> PathState {
     }
 
     if path.is_dir() {
-        return PathState::Directory(
-            WalkDir::new(path)
-                .into_iter()
-                .filter_map(|e| e.ok())
-                .count(),
-        );
+        let mut element_count = 0;
+
+        for entry in WalkDir::new(path)
+            .into_iter()
+            .filter_map(|e| e.ok()) {
+                if !is_hidden_path(&entry) && !entry.metadata().unwrap().is_dir() {
+                    element_count += 1;
+                }
+            }
+
+        return PathState::Directory(element_count);
     }
 
     // Path is neither valid file nor directory
     PathState::Invalid
+}
+
+// Returns whether a directory entry points to a hidden file or directory
+fn is_hidden_path(entry: &DirEntry) -> bool {
+    entry.file_name()
+        .to_str()
+        .map(|s| s.starts_with("."))
+        .unwrap_or(false)
 }
