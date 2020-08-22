@@ -1,5 +1,6 @@
 use fancy_regex::Regex;
 use lazy_static::lazy_static;
+use path_absolutize::*;
 use std::fs::OpenOptions;
 use std::path::Path;
 use walkdir::WalkDir;
@@ -52,11 +53,19 @@ pub fn parse_paths(path_string: &str) -> Vec<String> {
 }
 
 pub fn check_path(path_string: &str) -> PathState {
-    // Convert string to path
-    let path = Path::new(path_string);
-    // Check if path is valid
-    // If directory: Check if it can be read and count the elements that can be read
-    // If file: Check if it can be read
+    let mut path = path_string.to_string();
+    let trim_characters = ['\\', '/', '.'];
+    if Path::new(&path).is_relative() && path.len() > 0 {
+        
+        let first_character = path.chars().next().unwrap();
+        if first_character != '.' {
+            path = path.trim_left_matches(|c: char| c.is_whitespace() || trim_characters.contains(&c)).to_string();
+            path.insert_str(0, "./");
+        }
+    }
+
+    let path = Path::new(&path);
+    let path = path.absolutize().unwrap();
 
     if path.is_file() {
         let file = OpenOptions::new().read(true).open(path);
