@@ -1,3 +1,5 @@
+use anyhow::{Result};
+
 use crossterm::{
     self,
     event::{self, KeyCode},
@@ -10,10 +12,9 @@ use std::time;
 use tui::{
     self,
     backend::CrosstermBackend,
-    layout::{Alignment, Constraint, Direction, Layout},
+    layout::{Constraint, Direction, Layout},
     style,
-    text::{Span, Text},
-    widgets::{Block, Borders, List, ListItem, ListState, Paragraph, StatefulWidget, Widget, Wrap},
+    widgets::{Block, Borders, List, ListItem, ListState},
 };
 
 use crate::file_processing;
@@ -27,7 +28,7 @@ pub enum UIMessage {
 }
 
 pub enum UIData {
-    file_path_list(StyledPathList),
+    FilePathList(StyledPathList),
 }
 
 pub enum UIEvent {
@@ -134,7 +135,10 @@ impl StyledFilePath {
     }
 
     pub fn validate(&mut self) {
-        self.state = file_processing::check_path(&self.path);
+        self.state = match file_processing::check_path(&self.path) {
+            Ok(state) => state,
+            Err(_) => PathState::Invalid,
+        }
     }
 }
 
@@ -218,12 +222,12 @@ impl StyledPathList {
         self.paths.insert(index, new_element);
     }
 
-    pub fn next(&mut self) {
+    pub fn next(&mut self) -> Result<()> {
         let mut offset = 1;
         let i = match self.state.selected() {
             Some(i) => {
                 if self.paths[i].state == PathState::Unchecked {
-                    offset += self.parse_selected();
+                    offset += self.parse_selected()?;
                 } else {
                     self.paths[i].deselect();
                 }
@@ -233,11 +237,12 @@ impl StyledPathList {
         };
         self.state.select(Some(i));
         self.paths[i].select();
+        Ok(())
     }
 
-    pub fn parse_selected(&mut self) -> usize {
+    pub fn parse_selected(&mut self) -> Result<usize> {
         let index = self.state.selected().unwrap();
-        let mut parsed_paths = file_processing::parse_paths(&self.paths[index].path);
+        let mut parsed_paths = file_processing::parse_paths(&self.paths[index].path)?;
         let mut new_path_count = parsed_paths.len();
 
         if new_path_count == 0 {
@@ -258,7 +263,7 @@ impl StyledPathList {
         // Replace selected element with parsed elements
         self.paths.splice(index..index + 1, new_paths);
 
-        new_path_count - 1
+        Ok(new_path_count - 1)
     }
 
     pub fn previous(&mut self) {
@@ -508,7 +513,7 @@ impl UI {
                         | KeyCode::Up => data.file_paths.edit_selected(&event.code),
                         KeyCode::Esc => {
                             self.application
-                                .send(UIMessage::Data(UIData::file_path_list(
+                                .send(UIMessage::Data(UIData::FilePathList(
                                     data.file_paths.clone(),
                                 )));
                         }

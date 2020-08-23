@@ -2,6 +2,7 @@ use crossbeam_channel;
 use std::thread;
 use std::time;
 
+mod error;
 mod file_processing;
 mod logic_state_machine;
 use logic_state_machine::LogicStateMachine;

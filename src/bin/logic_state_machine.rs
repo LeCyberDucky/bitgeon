@@ -1,8 +1,6 @@
 use std::ops::Deref;
 use std::time;
 
-use tui::{self, widgets::ListState};
-
 use crate::settings;
 use crate::ui::{AppState, StyledPathList, UIData, UIEvent, UIMessage};
 use crate::util;
@@ -72,7 +70,7 @@ impl LogicStateMachine {
         for message in ui_updates {
             match message {
                 UIMessage::Data(ui_data) => {
-                    if let UIData::file_path_list(file_paths) = ui_data {
+                    if let UIData::FilePathList(file_paths) = ui_data {
                         self.files_for_transmission = file_paths;
                     }
                 }
