@@ -30,9 +30,7 @@ fn main() {
             internal_logic_refresh_rate: 60,
         },
         files_for_transmission: StyledPathList::new(
-            String::from(
-                "Edit paths below, or simply drag and drop files or directories here:",
-            ),
+            String::from("Edit paths below, or simply drag and drop files or directories here:"),
             vec![StyledFilePath::new("")],
         ),
     };

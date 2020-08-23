@@ -54,12 +54,17 @@ pub fn parse_paths(path_string: &str) -> Vec<String> {
 
 pub fn check_path(path_string: &str) -> PathState {
     let mut path = path_string.to_string();
+    if path.trim().is_empty() {
+        return PathState::Invalid;
+    }
+
     let trim_characters = ['\\', '/', '.'];
     if Path::new(&path).is_relative() && path.len() > 0 {
-        
         let first_character = path.chars().next().unwrap();
         if first_character != '.' {
-            path = path.trim_left_matches(|c: char| c.is_whitespace() || trim_characters.contains(&c)).to_string();
+            path = path
+                .trim_left_matches(|c: char| c.is_whitespace() || trim_characters.contains(&c))
+                .to_string();
             path.insert_str(0, "./");
         }
     }
@@ -79,13 +84,11 @@ pub fn check_path(path_string: &str) -> PathState {
     if path.is_dir() {
         let mut element_count = 0;
 
-        for entry in WalkDir::new(path)
-            .into_iter()
-            .filter_map(|e| e.ok()) {
-                if !is_hidden_path(&entry) && !entry.metadata().unwrap().is_dir() {
-                    element_count += 1;
-                }
+        for entry in WalkDir::new(path).into_iter().filter_map(|e| e.ok()) {
+            if !is_hidden_path(&entry) && !entry.metadata().unwrap().is_dir() {
+                element_count += 1;
             }
+        }
 
         return PathState::Directory(element_count);
     }
@@ -96,7 +99,8 @@ pub fn check_path(path_string: &str) -> PathState {
 
 // Returns whether a directory entry points to a hidden file or directory
 fn is_hidden_path(entry: &DirEntry) -> bool {
-    entry.file_name()
+    entry
+        .file_name()
         .to_str()
         .map(|s| s.starts_with("."))
         .unwrap_or(false)

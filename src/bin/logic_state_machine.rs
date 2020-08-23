@@ -4,7 +4,7 @@ use std::time;
 use tui::{self, widgets::ListState};
 
 use crate::settings;
-use crate::ui::{AppState, UIData, UIEvent, UIMessage, StyledPathList};
+use crate::ui::{AppState, StyledPathList, UIData, UIEvent, UIMessage};
 use crate::util;
 
 pub struct State(pub fn(&mut LogicStateMachine) -> State);
@@ -63,26 +63,22 @@ impl LogicStateMachine {
 
     pub fn add_files(&mut self) -> State {
         self.ui
-            .send(UIMessage::Event(UIEvent::StateChange(AppState::AddFiles(self.files_for_transmission.clone()))));
+            .send(UIMessage::Event(UIEvent::StateChange(AppState::AddFiles(
+                self.files_for_transmission.clone(),
+            ))));
 
         let ui_updates = self.wait_for_input();
 
         for message in ui_updates {
             match message {
-                UIMessage::Data(ui_data)=> {
+                UIMessage::Data(ui_data) => {
                     if let UIData::file_path_list(file_paths) = ui_data {
                         self.files_for_transmission = file_paths;
                     }
-                },
+                }
                 UIMessage::Event(_) => todo!(),
             }
         }
-
-        // for message in ui_updates {
-        //     match message {
-        //         UIMessage::UserInput()
-        //     }
-        // }
 
         State(Self::home)
     }

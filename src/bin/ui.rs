@@ -1,4 +1,8 @@
-use crossterm::{self, event::{self, KeyCode}, ExecutableCommand};
+use crossterm::{
+    self,
+    event::{self, KeyCode},
+    ExecutableCommand,
+};
 
 use std::io;
 use std::time;
@@ -30,7 +34,6 @@ pub enum UIEvent {
     Selection(usize),
     StateChange(AppState),
 }
-
 
 pub struct ScrollList {
     pub heading: String,
@@ -109,7 +112,7 @@ impl StyledFilePath {
         self.display_path = "   ".to_string(); // Padding spaces to account for emojis of other strings
         self.display_path.push_str(&self.path);
     }
-    
+
     // TODO: Rename this to style. Validation is done elsewhere.
     pub fn style(&mut self) {
         // Update display_path
@@ -120,8 +123,8 @@ impl StyledFilePath {
                 match count {
                     1 => self.display_path.push_str(" | 1 Accessible item"),
                     _ => self
-                    .display_path
-                    .push_str(&format!(" | {} Accessible items", count)),
+                        .display_path
+                        .push_str(&format!(" | {} Accessible items", count)),
                 }
             }
             PathState::File => self.display_path.insert_str(0, "✔  "),
@@ -180,9 +183,10 @@ impl StyledPathList {
             KeyCode::Enter => {
                 if let Some(index) = self.state.selected() {
                     self.parse_selected();
-                    let mut new_element = StyledFilePath::new("");
-                    new_element.style();
-                    self.paths.insert(index, new_element);
+                    self.insert_empty_element(index);
+                    // let mut new_element = StyledFilePath::new("");
+                    // new_element.style();
+                    // self.paths.insert(index, new_element);
                     self.paths[index].select();
                 }
             }
@@ -206,6 +210,12 @@ impl StyledPathList {
             .iter()
             .map(|path| path.display_path.clone())
             .collect()
+    }
+
+    pub fn insert_empty_element(&mut self, index: usize) {
+        let mut new_element = StyledFilePath::new("");
+        new_element.style();
+        self.paths.insert(index, new_element);
     }
 
     pub fn next(&mut self) {
@@ -273,8 +283,16 @@ impl StyledPathList {
         }
         None
     }
-}
 
+    pub fn select_first(&mut self) {
+        if self.paths.len() == 0 {
+            self.insert_empty_element(0);
+        }
+
+        self.paths[0].select();
+        self.state.select(Some(0));
+    }
+}
 
 pub enum AppState {
     AddFiles(StyledPathList),
@@ -301,7 +319,7 @@ impl SceneAddFiles {
             input: vec![],
             file_paths,
         };
-        scene.file_paths.next();
+        scene.file_paths.select_first();
         scene
     }
 }
@@ -311,7 +329,7 @@ pub struct SceneHome {
 }
 impl SceneHome {
     pub fn new() -> SceneHome {
-        SceneHome {
+        let mut scene = SceneHome {
             menu: ScrollList::new(
                 String::from("Choose an option:"),
                 vec![
@@ -320,7 +338,9 @@ impl SceneHome {
                     String::from("End"),
                 ],
             ),
-        }
+        };
+        scene.menu.next();
+        scene
     }
 }
 
@@ -480,14 +500,20 @@ impl UI {
             match &mut self.scene {
                 Scene::AddFiles(data) => match event::read().unwrap() {
                     event::Event::Key(event) => match event.code {
-                        KeyCode::Backspace | KeyCode::Char(_) | KeyCode::Delete | 
-                        KeyCode::Down      | KeyCode::Enter   | KeyCode::Up
-                             => data.file_paths.edit_selected(&event.code),
+                        KeyCode::Backspace
+                        | KeyCode::Char(_)
+                        | KeyCode::Delete
+                        | KeyCode::Down
+                        | KeyCode::Enter
+                        | KeyCode::Up => data.file_paths.edit_selected(&event.code),
                         KeyCode::Esc => {
-                            self.application.send(UIMessage::Data(UIData::file_path_list(data.file_paths.clone())));
-                        },
+                            self.application
+                                .send(UIMessage::Data(UIData::file_path_list(
+                                    data.file_paths.clone(),
+                                )));
+                        }
                         _ => (),
-                    } ,
+                    },
                     _ => todo!(),
                     _ => frame_changed = self.frame_changed,
                 },
@@ -526,7 +552,9 @@ impl UI {
                         UIEvent::StateChange(state) => {
                             self.application_state = state;
                             self.scene = match &self.application_state {
-                                AppState::AddFiles(file_list) => Scene::AddFiles(SceneAddFiles::new(file_list.to_owned())),
+                                AppState::AddFiles(file_list) => {
+                                    Scene::AddFiles(SceneAddFiles::new(file_list.to_owned()))
+                                }
                                 AppState::End => Scene::End,
                                 AppState::Home => Scene::Home(SceneHome::new()),
                                 AppState::Initialization => todo!(),
