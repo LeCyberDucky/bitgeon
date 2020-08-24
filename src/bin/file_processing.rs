@@ -5,10 +5,7 @@ use anyhow::{Context, Result};
 use fancy_regex::Regex;
 use lazy_static::lazy_static;
 use path_absolutize::*;
-// use thiserror::Error;
 use walkdir::{DirEntry, WalkDir};
-
-// use crate::error::ApplicationError;
 
 #[derive(Clone, PartialEq)]
 pub enum PathState {
@@ -28,13 +25,13 @@ pub fn parse_paths(path_string: &str) -> Result<Vec<String>> {
     // Example: The following string should be split into four paths:
     // r"C:\Users\USERNAME\images\ferris.jpg C:\Users\USERNAME\images; /images/; /images/ferris.jpg"
     lazy_static! {
-        static ref re: Regex =
+        static ref RE: Regex =
             Regex::new(r"((?:[A-z]:.+?(?=[A-z]:|$|\n|;))|(?:.+?(?=;|$|\n|[A-z]:)))").unwrap(); // unwrap is fine because if the regex compiles once, it will always compile
     }
 
     let mut capture_pos = 0;
     while capture_pos < path_string.len() {
-        let result = re
+        let result = RE
             .captures_from_pos(&path_string, capture_pos)
             .with_context(|| format!("Error running regex"))?;
 
@@ -86,7 +83,7 @@ pub fn check_path(path_string: &str) -> Result<PathState> {
 
         match file {
             Ok(_) => return Ok(PathState::File),
-            Err(error) => return Ok(PathState::Invalid),
+            Err(_error) => return Ok(PathState::Invalid),
         }
     }
 

@@ -158,7 +158,7 @@ impl StyledPathList {
         }
     }
 
-    pub fn edit_selected(&mut self, key: &KeyCode) {
+    pub fn edit_selected(&mut self, key: &KeyCode) -> Result<_> {
         match key {
             KeyCode::Backspace | KeyCode::Char(_) => {
                 if let Some(index) = self.state.selected() {
@@ -181,12 +181,12 @@ impl StyledPathList {
                 }
             }
             KeyCode::Down => {
-                self.parse_selected();
-                self.next();
+                self.parse_selected()?;
+                self.next()?;
             }
             KeyCode::Enter => {
                 if let Some(index) = self.state.selected() {
-                    self.parse_selected();
+                    self.parse_selected()?;
                     self.insert_empty_element(index);
                     // let mut new_element = StyledFilePath::new("");
                     // new_element.style();
@@ -195,18 +195,19 @@ impl StyledPathList {
                 }
             }
             KeyCode::Up => {
-                self.parse_selected();
-                self.previous();
+                self.parse_selected()?;
+                self.previous()?;
             }
             _ => (),
         }
+        Ok(())
     }
 
-    pub fn export(&mut self) -> StyledPathList {
+    pub fn export(&mut self) -> Result<StyledPathList> {
         // Making sure that everything is parsed and checked before exporting
         self.previous();
-        self.next();
-        self.clone()
+        self.next()?;
+        Ok(self.clone())
     }
 
     pub fn get_styled_paths(&self) -> Vec<String> {
@@ -266,11 +267,11 @@ impl StyledPathList {
         Ok(new_path_count - 1)
     }
 
-    pub fn previous(&mut self) {
+    pub fn previous(&mut self) -> Result<()> {
         let i = match self.state.selected() {
             Some(i) => {
                 if self.paths[i].state == PathState::Unchecked {
-                    self.parse_selected();
+                    self.parse_selected()?;
                 } else {
                     self.paths[i].deselect();
                 }
@@ -280,6 +281,7 @@ impl StyledPathList {
         };
         self.state.select(Some(i));
         self.paths[i].select();
+        Ok(())
     }
 
     pub fn selected(&mut self) -> Option<&mut StyledFilePath> {
@@ -361,7 +363,7 @@ pub struct UI {
 }
 
 impl UI {
-    pub fn run(application: util::Channel<UIMessage>) {
+    pub fn run(application: util::Channel<UIMessage>) -> Result<_>{
         // Setup
         let mut ui = UI {
             application,
@@ -374,9 +376,9 @@ impl UI {
             frame_changed: false,
         };
 
-        crossterm::terminal::enable_raw_mode();
-        io::stdout().execute(crossterm::terminal::EnterAlternateScreen);
-        io::stdout().execute(crossterm::cursor::Hide);
+        crossterm::terminal::enable_raw_mode()?;
+        io::stdout().execute(crossterm::terminal::EnterAlternateScreen)?;
+        io::stdout().execute(crossterm::cursor::Hide)?;
         let mut terminal = tui::Terminal::new(CrosstermBackend::new(io::stdout())).unwrap();
 
         while std::mem::discriminant(&ui.scene) != std::mem::discriminant(&Scene::End) {
@@ -392,16 +394,16 @@ impl UI {
         }
 
         // Reset terminal to initial state
-        crossterm::terminal::disable_raw_mode();
-        io::stdout().execute(crossterm::terminal::LeaveAlternateScreen);
-        io::stdout().execute(crossterm::cursor::Show);
+        crossterm::terminal::disable_raw_mode()?;
+        io::stdout().execute(crossterm::terminal::LeaveAlternateScreen)?;
+        io::stdout().execute(crossterm::cursor::Show)?;
     }
 
     pub fn draw(&mut self, terminal: &mut tui::Terminal<CrosstermBackend<io::Stdout>>) {
         match self.scene {
             Scene::AddFiles(_) => {
                 terminal
-                    .draw(|mut f| {
+                    .draw(| f| {
                         let style = style::Style::default();
 
                         if let Scene::AddFiles(data) = &mut self.scene {
@@ -435,7 +437,7 @@ impl UI {
 
             Scene::Home(_) => {
                 terminal
-                    .draw(|mut f| {
+                    .draw(|f| {
                         // UI sections
                         let split_horizontal = Layout::default()
                             .direction(Direction::Vertical)
@@ -498,10 +500,10 @@ impl UI {
         }
     }
 
-    pub fn interact(&mut self) {
+    pub fn interact(&mut self) -> Result<_> {
         let mut frame_changed = true;
 
-        if event::poll(time::Duration::from_secs(0)).unwrap() {
+        if event::poll(time::Duration::from_secs(0))? {
             match &mut self.scene {
                 Scene::AddFiles(data) => match event::read().unwrap() {
                     event::Event::Key(event) => match event.code {
@@ -515,11 +517,11 @@ impl UI {
                             self.application
                                 .send(UIMessage::Data(UIData::FilePathList(
                                     data.file_paths.clone(),
-                                )));
+                                )))?;
                         }
-                        _ => (),
+                        _ => Ok(()),
                     },
-                    _ => todo!(),
+                    // _ => todo!(),
                     _ => frame_changed = self.frame_changed,
                 },
 
@@ -531,7 +533,7 @@ impl UI {
                             KeyCode::Enter => match data.menu.state.selected() {
                                 Some(option) => {
                                     self.application
-                                        .send(UIMessage::Event(UIEvent::Selection(option)));
+                                        .send(UIMessage::Event(UIEvent::Selection(option)))?;
                                 }
                                 None => (),
                             },
@@ -544,6 +546,7 @@ impl UI {
             }
         }
         self.frame_changed = frame_changed;
+        Ok(())
     }
 
     pub fn update(&mut self) {
@@ -565,7 +568,7 @@ impl UI {
                                 AppState::Initialization => todo!(),
                             }
                         }
-                        UIEvent::Selection(option) => unimplemented!(),
+                        UIEvent::Selection(_option) => todo!(),
                     },
                     _ => todo!(),
                 }

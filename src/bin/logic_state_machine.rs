@@ -1,6 +1,8 @@
 use std::ops::Deref;
 use std::time;
 
+use anyhow::{Result};
+
 use crate::settings;
 use crate::ui::{AppState, StyledPathList, UIData, UIEvent, UIMessage};
 use crate::util;
@@ -59,43 +61,42 @@ impl LogicStateMachine {
         ui_updates
     }
 
-    pub fn add_files(&mut self) -> State {
+    pub fn add_files(&mut self) -> Result<State> {
         self.ui
             .send(UIMessage::Event(UIEvent::StateChange(AppState::AddFiles(
                 self.files_for_transmission.clone(),
-            ))));
+            ))))?;
 
         let ui_updates = self.wait_for_input();
 
         for message in ui_updates {
             match message {
                 UIMessage::Data(ui_data) => {
-                    if let UIData::FilePathList(file_paths) = ui_data {
-                        self.files_for_transmission = file_paths;
-                    }
+                    let UIData::FilePathList(file_paths) = ui_data;
+                    self.files_for_transmission = file_paths;
                 }
                 UIMessage::Event(_) => todo!(),
             }
         }
 
-        State(Self::home)
+        Ok(State(Self::home))
     }
 
-    pub fn end(&mut self) -> State {
+    pub fn end(&mut self) -> Result<State> {
         self.ui
-            .send(UIMessage::Event(UIEvent::StateChange(AppState::End)));
-        State(Self::exit)
+            .send(UIMessage::Event(UIEvent::StateChange(AppState::End)))?;
+        Ok(State(Self::exit))
     }
 
     pub fn exit(&mut self) -> State {
         State(Self::exit)
     }
 
-    pub fn home(&mut self) -> State {
+    pub fn home(&mut self) -> Result<State> {
         self.ui
-            .send(UIMessage::Event(UIEvent::StateChange(AppState::Home)));
+            .send(UIMessage::Event(UIEvent::StateChange(AppState::Home)))?;
 
-        let mut ui_updates = self.wait_for_input();
+        let ui_updates = self.wait_for_input();
 
         for message in ui_updates {
             match message {
@@ -112,7 +113,7 @@ impl LogicStateMachine {
             }
         }
 
-        State(Self::end)
+        Ok(State(Self::end))
     }
 
     pub fn init(&mut self) -> State {
