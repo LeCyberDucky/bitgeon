@@ -1,4 +1,4 @@
-use anyhow::{Result};
+use anyhow::Result;
 
 use crossterm::{
     self,
@@ -158,7 +158,7 @@ impl StyledPathList {
         }
     }
 
-    pub fn edit_selected(&mut self, key: &KeyCode) -> Result<_> {
+    pub fn edit_selected(&mut self, key: &KeyCode) -> Result<()> {
         match key {
             KeyCode::Backspace | KeyCode::Char(_) => {
                 if let Some(index) = self.state.selected() {
@@ -205,7 +205,7 @@ impl StyledPathList {
 
     pub fn export(&mut self) -> Result<StyledPathList> {
         // Making sure that everything is parsed and checked before exporting
-        self.previous();
+        self.previous()?;
         self.next()?;
         Ok(self.clone())
     }
@@ -363,7 +363,7 @@ pub struct UI {
 }
 
 impl UI {
-    pub fn run(application: util::Channel<UIMessage>) -> Result<_>{
+    pub fn run(application: util::Channel<UIMessage>) -> Result<()> {
         // Setup
         let mut ui = UI {
             application,
@@ -388,7 +388,7 @@ impl UI {
                 ui.frame_changed = false;
                 ui.draw(&mut terminal);
             }
-            ui.interact(); // User interaction
+            ui.interact()?; // User interaction
 
             util::sleep_remaining_frame(&ui.clock, &mut ui.frame_count, &ui.ui_refresh_rate);
         }
@@ -397,13 +397,14 @@ impl UI {
         crossterm::terminal::disable_raw_mode()?;
         io::stdout().execute(crossterm::terminal::LeaveAlternateScreen)?;
         io::stdout().execute(crossterm::cursor::Show)?;
+        Ok(())
     }
 
     pub fn draw(&mut self, terminal: &mut tui::Terminal<CrosstermBackend<io::Stdout>>) {
         match self.scene {
             Scene::AddFiles(_) => {
                 terminal
-                    .draw(| f| {
+                    .draw(|f| {
                         let style = style::Style::default();
 
                         if let Scene::AddFiles(data) = &mut self.scene {
@@ -500,7 +501,7 @@ impl UI {
         }
     }
 
-    pub fn interact(&mut self) -> Result<_> {
+    pub fn interact(&mut self) -> Result<()> {
         let mut frame_changed = true;
 
         if event::poll(time::Duration::from_secs(0))? {
@@ -512,14 +513,12 @@ impl UI {
                         | KeyCode::Delete
                         | KeyCode::Down
                         | KeyCode::Enter
-                        | KeyCode::Up => data.file_paths.edit_selected(&event.code),
-                        KeyCode::Esc => {
-                            self.application
-                                .send(UIMessage::Data(UIData::FilePathList(
-                                    data.file_paths.clone(),
-                                )))?;
-                        }
-                        _ => Ok(()),
+                        | KeyCode::Up => data.file_paths.edit_selected(&event.code)?,
+                        KeyCode::Esc => self.application.send(UIMessage::Data(
+                            UIData::FilePathList(data.file_paths.clone()),
+                        ))?,
+
+                        _ => (),
                     },
                     // _ => todo!(),
                     _ => frame_changed = self.frame_changed,

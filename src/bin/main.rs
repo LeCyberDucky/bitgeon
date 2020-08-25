@@ -1,8 +1,8 @@
+use anyhow::Result;
 use crossbeam_channel;
 use std::thread;
 use std::time;
 
-mod error;
 mod file_processing;
 mod logic_state_machine;
 use logic_state_machine::LogicStateMachine;
@@ -12,7 +12,7 @@ mod ui;
 use ui::{StyledFilePath, StyledPathList};
 mod util;
 
-fn main() {
+fn main() -> Result<()> {
     // Initialize state machine
     let (app_tx, ui_rx) = crossbeam_channel::unbounded();
     let (ui_tx, app_rx) = crossbeam_channel::unbounded();
@@ -39,15 +39,16 @@ fn main() {
     // Setup UI
     let ui = thread::Builder::new()
         .name("User Interface".to_string())
-        .spawn(move || {
+        .spawn(move || -> Result<()> {
             ui::UI::run(util::Channel {
                 sender: ui_tx,
                 receiver: ui_rx,
-            });
-        })
-        .unwrap();
+            })?;
+            Ok(())
+        })?;
 
-    application.run();
+    application.run()?;
 
-    ui.join().unwrap();
+    ui.join().unwrap()?;
+    Ok(())
 }

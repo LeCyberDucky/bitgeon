@@ -37,8 +37,7 @@ pub fn parse_paths(path_string: &str) -> Result<Vec<String>> {
 
         match result {
             Some(captures) => {
-                let group = captures.get(0)
-                    .with_context(|| format!("No regex group"))?;
+                let group = captures.get(0).with_context(|| format!("No regex group"))?;
                 let path = group.as_str();
                 let path = path
                     .trim_matches(|c: char| c.is_whitespace() || trim_characters.contains(&c))
@@ -75,8 +74,12 @@ pub fn check_path(path_string: &str) -> Result<PathState> {
     }
 
     let path = Path::new(&path);
-    let path = path.absolutize().
-        with_context(|| format!("Error turning \"{}\" into absolute path", path.to_str().unwrap()))?;
+    let path = path.absolutize().with_context(|| {
+        format!(
+            "Error turning \"{}\" into absolute path",
+            path.to_str().unwrap()
+        )
+    })?;
 
     if path.is_file() {
         let file = OpenOptions::new().read(true).open(path);
