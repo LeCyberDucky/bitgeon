@@ -7,14 +7,11 @@ use std::time;
 use anyhow::{anyhow, Context, Result};
 use thiserror::Error;
 
-// use crate::error::AppError;
-
+// TODO: Figure out how this error handling should actually be done
 #[derive(Debug, Error)]
 pub enum ServerStatus {
     #[error("All good")]
     Ok,
-    // Initializing,
-    // GatewayError,
     #[error("Unable to obtain internal port")]
     InternalPortError(anyhow::Error),
     #[error("Unable to obtain external port")]
@@ -25,26 +22,16 @@ pub enum ServerStatus {
     PublicIPError(anyhow::Error),
     #[error("Unable to create TCPListener")]
     TCPBindError(anyhow::Error),
-    // UPnPError,
-    // #[error(transparent)]
-    // Other(#[from] anyhow::Error),
 }
 
-// impl fmt::Display for ServerStatus {
-//     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-//         write!(f, "Server error. Whoopsie!") // TODO: Actually give meaningful output here
-//     }
-// }
 
 pub struct Server {
-    // local_address: Option<SocketAddr>,
     listener: Option<TcpListener>,
     pub local_ip: Option<IpAddr>,
     pub public_ip: Option<IpAddr>,
     pub internal_port: Option<u16>,
     pub external_port: Option<u16>,
     upnp_lease_clock: time::Instant,
-    // upnp_lease_duration: u32, // UPnP lease time here only supports u32. time::Duration takes u64.
     upnp_lease_duration: time::Duration,
     peers: Vec<Peer>,
     pub status: ServerStatus, // Should we have a vector of errors or only store one at a time?
@@ -59,94 +46,23 @@ impl Server {
             internal_port: None,
             external_port: None,
             upnp_lease_clock: time::Instant::now(),
-            // upnp_lease_duration: 60 * 15,
-            upnp_lease_duration: time::Duration::from_secs(60 * 15),
+            upnp_lease_duration: time::Duration::from_secs(60 * 15), // TODO: Don't hard code this. Read from config file but also provide default value
             peers: vec![],
             status: ServerStatus::Ok,
         };
 
         server.refresh_connection();
         server
-
-        // // No need to crash if connection doesn't work initially
-        // match TcpListener::bind("0.0.0.0:0") {
-        //     Ok(listener) => server.listener = Some(listner),
-        //     Err(error) => {
-        //         server.status = ServerStatus::from(error.into());
-        //         return server;
-        //     }
-        // }
-
-        // match get_local_ip() {
-        //     Ok(ip) => server.local_ip = Some(ip),
-        //     Err(error) => {
-        //         server.status = ServerStatus::from(error.into());
-        //         return server;
-        //     }
-        // };
-
-        // match get_public_ip() {
-        //     Ok(ip) => server.public_ip = Some(ip),
-        //     Err(error) => {
-        //         server.status = ServerStatus::from(error.into());
-        //         return server;
-        //     }
-        // };
-
-        // // This unwrap will only be reached if the listener is ok above
-        // match server.listener.unwrap().local_addr() {
-        //     Ok(address) => server.internal_port = address.port(),
-        //     Err(error) => {
-        //         server.status = ServerStatus::from(error.into());
-        //         return server;
-        //     }
-        // };
-
-        // match add_port_mapping() {
-        //     Ok(port) => server.external_port = Some(port),
-        //     Err(error) => {
-        //         server.status = ServerStatus::from(error.into());
-        //         return server;
-        //     }
-        // }
-
-        // server
-
-        // let local_ip = get_local_ip().ok();
-        // // Bind listener to every available interface. Let OS provide an available port.
-        // // TODO: Perhaps let the user specify a port on their own
-        // let listener = TcpListener::bind("0.0.0.0:0").ok();
-        // let internal_port = match listener {
-        //     Some(listener) => match listener.local_addr() {
-        //         Ok(address) => address.port(),
-        //         Err(_) => None,
-        //     },
-        //     None => None,
-        // };
-
-        // let public_ip = get_public_ip().ok();
-        // let external_port = None;
-
-        // Server {
-        //     listener,
-        //     local_ip: local_ip,
-        //     internal_port,
-        //     public_ip: public_ip.ok(),
-        //     external_port,
-        //     upnp_lease_clock: time::Instant::now(),
-        //     upnp_lease_duration: time::Duration::from_secs(300), // TODO: Don't hard code this. Read from config file but also provide default value
-        //     peers: vec![],
-        // }
     }
 
     pub fn refresh_connection(&mut self) {
+        self.status = ServerStatus::Ok;
+
+        // Bind listener to every available interface. Let OS provide an available port.
+        // TODO: Perhaps let the user specify a port on their own
         match TcpListener::bind("0.0.0.0:0") {
-            // Bind to empty port on all interfaces
             Ok(listener) => self.listener = Some(listener),
             Err(error) => {
-                // self.status = ServerStatus::from(error.into());
-                // self.status = ServerStatus::from(anyhow::anyhow!(error));
-                // self.status = ServerStatus::TCPBindError;
                 self.status = ServerStatus::TCPBindError(anyhow!(error));
                 return;
             }
@@ -155,7 +71,6 @@ impl Server {
         match get_local_ip() {
             Ok(ip) => self.local_ip = Some(ip),
             Err(error) => {
-                // self.status = ServerStatus::from(anyhow::anyhow!(error));
                 self.status = ServerStatus::LocalIPError(anyhow!(error));
                 return;
             }
@@ -164,7 +79,6 @@ impl Server {
         match get_public_ip() {
             Ok(ip) => self.public_ip = Some(ip),
             Err(error) => {
-                // self.status = ServerStatus::from(error.into());
                 self.status = ServerStatus::PublicIPError(anyhow!(error));
                 return;
             }
@@ -174,7 +88,6 @@ impl Server {
         match self.listener.as_ref().unwrap().local_addr() {
             Ok(address) => self.internal_port = Some(address.port()),
             Err(error) => {
-                // self.status = ServerStatus::from(error.into());
                 self.status = ServerStatus::InternalPortError(anyhow!(error));
                 return;
             }
@@ -183,7 +96,6 @@ impl Server {
         match self.add_port_mapping() {
             Ok(port) => self.external_port = Some(port),
             Err(error) => {
-                // self.status = ServerStatus::from(error.into());
                 self.status = ServerStatus::ExternalPortError(anyhow!(error));
                 return;
             }

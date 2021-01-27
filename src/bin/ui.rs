@@ -22,6 +22,7 @@ use crate::util;
 use file_processing::PathState;
 
 // Inter-process messages between ui and backend
+// TODO: This should just be called Message
 pub enum UIMessage {
     Data(UIData),
     Event(UIEvent),
@@ -383,6 +384,7 @@ impl UI {
         io::stdout().execute(crossterm::cursor::Hide)?;
         let mut terminal = tui::Terminal::new(CrosstermBackend::new(io::stdout())).unwrap();
 
+        // TODO: Figure out what is happening here and document that in a comment
         while std::mem::discriminant(&ui.scene) != std::mem::discriminant(&Scene::End) {
             ui.update();
             if ui.frame_changed {
