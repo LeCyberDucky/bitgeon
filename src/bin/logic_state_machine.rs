@@ -4,6 +4,7 @@ use std::time;
 use anyhow::Result;
 
 use crate::settings;
+use crate::transmission;
 use crate::ui::{AppState, StyledPathList, UIData, UIEvent, UIMessage};
 use crate::util;
 
@@ -31,9 +32,10 @@ pub struct LogicStateMachine {
     pub state: State,
     pub clock: time::Instant,
     pub frame_count: u64,
-    pub ui: util::Channel<UIMessage>,
+    pub ui: util::ThreadChannel<UIMessage>,
     pub settings: settings::Settings,
     pub files_for_transmission: StyledPathList,
+    pub server: transmission::Server,
 }
 
 impl LogicStateMachine {
@@ -62,9 +64,9 @@ impl LogicStateMachine {
         ui_updates
     }
 
-    pub fn add_files(&mut self) -> Result<State> {
+    pub fn edit_files(&mut self) -> Result<State> {
         self.ui
-            .send(UIMessage::Event(UIEvent::StateChange(AppState::AddFiles(
+            .send(UIMessage::Event(UIEvent::StateChange(AppState::EditFiles(
                 self.files_for_transmission.clone(),
             ))))?;
 
@@ -94,8 +96,12 @@ impl LogicStateMachine {
     }
 
     pub fn home(&mut self) -> Result<State> {
-        self.ui
-            .send(UIMessage::Event(UIEvent::StateChange(AppState::Home)))?;
+        // self.ui
+        //     .send(UIMessage::Event(UIEvent::StateChange(AppState::Home({
+        //         let ip = self.server.public_ip.to_string();
+        //         let port = self.server.external_port.to_string();
+        //         format!("{}:{}", ip, port)
+        //     }))))?;
 
         let ui_updates = self.wait_for_input();
 
@@ -103,7 +109,7 @@ impl LogicStateMachine {
             match message {
                 UIMessage::Event(event) => match event {
                     UIEvent::Selection(selection) => match selection {
-                        0 => return Ok(State(Self::add_files)),
+                        0 => return Ok(State(Self::edit_files)),
                         1 => return Ok(State(Self::receive)),
                         2 => return Ok(State(Self::end)),
                         _ => todo!(),
@@ -118,10 +124,12 @@ impl LogicStateMachine {
     }
 
     pub fn init(&mut self) -> Result<State> {
+        // Setup TCP listener
         Ok(State(Self::home))
     }
 
     pub fn receive(&mut self) -> Result<State> {
+        todo!();
         Ok(State(Self::home))
     }
 }

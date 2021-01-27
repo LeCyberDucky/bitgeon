@@ -4,5 +4,7 @@
 **/*.rs.bk
 
 *.docx
+*.pdf
 
 /src/sketch.rs
+*sketch.rs

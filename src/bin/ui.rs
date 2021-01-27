@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{self, Result};
 
 use crossterm::{
     self,
@@ -188,15 +188,15 @@ impl StyledPathList {
                 if let Some(index) = self.state.selected() {
                     self.parse_selected()?;
                     self.insert_empty_element(index);
-                    // let mut new_element = StyledFilePath::new("");
-                    // new_element.style();
-                    // self.paths.insert(index, new_element);
                     self.paths[index].select();
                 }
             }
             KeyCode::Up => {
                 self.parse_selected()?;
                 self.previous()?;
+            }
+            KeyCode::Esc => {
+                self.parse_selected()?;
             }
             _ => (),
         }
@@ -302,27 +302,27 @@ impl StyledPathList {
 }
 
 pub enum AppState {
-    AddFiles(StyledPathList),
+    EditFiles(StyledPathList),
     End,
-    Home,
+    Home(String),
     Initialization,
 }
 
 pub enum Scene {
-    AddFiles(SceneAddFiles),
+    EditFiles(SceneEditFiles),
     End,
     Home(SceneHome),
     Initialization,
 }
 
-pub struct SceneAddFiles {
+pub struct SceneEditFiles {
     input: Vec<char>,
     file_paths: StyledPathList,
 }
 
-impl SceneAddFiles {
-    pub fn new(file_paths: StyledPathList) -> SceneAddFiles {
-        let mut scene = SceneAddFiles {
+impl SceneEditFiles {
+    pub fn new(file_paths: StyledPathList) -> SceneEditFiles {
+        let mut scene = SceneEditFiles {
             input: vec![],
             file_paths,
         };
@@ -333,18 +333,20 @@ impl SceneAddFiles {
 
 pub struct SceneHome {
     menu: ScrollList,
+    connection_info: String,
 }
 impl SceneHome {
-    pub fn new() -> SceneHome {
+    pub fn new(connection_info: String) -> SceneHome {
         let mut scene = SceneHome {
             menu: ScrollList::new(
                 String::from("Choose an option:"),
                 vec![
-                    String::from("Add files"),
+                    String::from("Add or remove files"),
                     String::from("Receive"),
                     String::from("End"),
                 ],
             ),
+            connection_info,
         };
         scene.menu.next();
         scene
@@ -352,7 +354,7 @@ impl SceneHome {
 }
 
 pub struct UI {
-    pub application: util::Channel<UIMessage>,
+    pub application: util::ThreadChannel<UIMessage>,
     pub application_state: AppState,
     pub scene: Scene,
     pub ui_refresh_rate: u16,
@@ -363,12 +365,12 @@ pub struct UI {
 }
 
 impl UI {
-    pub fn run(application: util::Channel<UIMessage>) -> Result<()> {
+    pub fn run(application: util::ThreadChannel<UIMessage>) -> Result<()> {
         // Setup
         let mut ui = UI {
             application,
             application_state: AppState::Initialization,
-            scene: Scene::Home(SceneHome::new()),
+            scene: Scene::Home(SceneHome::new(String::from(""))),
             ui_refresh_rate: 60,
             clock: time::Instant::now(),
             frame_count: 0,
@@ -402,12 +404,12 @@ impl UI {
 
     pub fn draw(&mut self, terminal: &mut tui::Terminal<CrosstermBackend<io::Stdout>>) {
         match self.scene {
-            Scene::AddFiles(_) => {
+            Scene::EditFiles(_) => {
                 terminal
                     .draw(|f| {
                         let style = style::Style::default();
 
-                        if let Scene::AddFiles(data) = &mut self.scene {
+                        if let Scene::EditFiles(data) = &mut self.scene {
                             let styled_paths = data.file_paths.get_styled_paths();
                             let file_paths: Vec<ListItem> = styled_paths
                                 .iter()
@@ -506,7 +508,7 @@ impl UI {
 
         if event::poll(time::Duration::from_secs(0))? {
             match &mut self.scene {
-                Scene::AddFiles(data) => match event::read().unwrap() {
+                Scene::EditFiles(data) => match event::read().unwrap() {
                     event::Event::Key(event) => match event.code {
                         KeyCode::Backspace
                         | KeyCode::Char(_)
@@ -514,9 +516,12 @@ impl UI {
                         | KeyCode::Down
                         | KeyCode::Enter
                         | KeyCode::Up => data.file_paths.edit_selected(&event.code)?,
-                        KeyCode::Esc => self.application.send(UIMessage::Data(
-                            UIData::FilePathList(data.file_paths.clone()),
-                        ))?,
+                        KeyCode::Esc => {
+                            data.file_paths.edit_selected(&event.code)?;
+                            self.application.send(UIMessage::Data(UIData::FilePathList(
+                                data.file_paths.clone(),
+                            )))?;
+                        }
 
                         _ => (),
                     },
@@ -559,11 +564,13 @@ impl UI {
                         UIEvent::StateChange(state) => {
                             self.application_state = state;
                             self.scene = match &self.application_state {
-                                AppState::AddFiles(file_list) => {
-                                    Scene::AddFiles(SceneAddFiles::new(file_list.to_owned()))
+                                AppState::EditFiles(file_list) => {
+                                    Scene::EditFiles(SceneEditFiles::new(file_list.to_owned()))
                                 }
                                 AppState::End => Scene::End,
-                                AppState::Home => Scene::Home(SceneHome::new()),
+                                AppState::Home(connection_info) => {
+                                    Scene::Home(SceneHome::new(connection_info.to_owned()))
+                                }
                                 AppState::Initialization => todo!(),
                             }
                         }
