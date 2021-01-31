@@ -124,7 +124,7 @@ impl UI {
         crossterm::terminal::enable_raw_mode()?;
         io::stdout().execute(crossterm::terminal::EnterAlternateScreen)?;
         io::stdout().execute(crossterm::cursor::Hide)?;
-        let mut terminal = tui::Terminal::new(CrosstermBackend::new(io::stdout())).unwrap();
+        let mut terminal = tui::Terminal::new(CrosstermBackend::new(io::stdout()))?;
 
         // TODO: Figure out what is happening here and document that in a comment
         while std::mem::discriminant(&ui.scene) != std::mem::discriminant(&Scene::End) {
@@ -132,7 +132,7 @@ impl UI {
             if ui.frame_changed {
                 // Visual change necessitates redraw
                 ui.frame_changed = false;
-                ui.draw(&mut terminal);
+                ui.draw(&mut terminal)?;
             }
             ui.interact()?; // User interaction
 
@@ -146,7 +146,7 @@ impl UI {
         Ok(())
     }
 
-    pub fn draw(&mut self, terminal: &mut tui::Terminal<CrosstermBackend<io::Stdout>>) {
+    pub fn draw(&mut self, terminal: &mut tui::Terminal<CrosstermBackend<io::Stdout>>) -> Result<()> {
         match self.scene {
             Scene::EditFiles(_) => {
                 terminal
@@ -178,8 +178,7 @@ impl UI {
 
                         let block = Block::default().borders(Borders::ALL);
                         f.render_widget(block, f.size());
-                    })
-                    .unwrap();
+                    })?;
             }
 
             Scene::Home(_) => {
@@ -241,10 +240,11 @@ impl UI {
                         let receiving = Block::default().title("Receiving").borders(Borders::ALL);
                         f.render_widget(receiving, split_horizontal_1[1]);
                     })
-                    .unwrap();
+                    ?;
             }
             _ => todo!(),
         }
+        Ok(())
     }
 
     pub fn interact(&mut self) -> Result<()> {
@@ -252,7 +252,7 @@ impl UI {
 
         if event::poll(time::Duration::from_secs(0))? {
             match &mut self.scene {
-                Scene::EditFiles(data) => match event::read().unwrap() {
+                Scene::EditFiles(data) => match event::read()? {
                     event::Event::Key(event) => match event.code {
                         KeyCode::Backspace
                         | KeyCode::Char(_)
@@ -273,7 +273,7 @@ impl UI {
                 },
 
                 Scene::Home(data) => {
-                    match event::read().unwrap() {
+                    match event::read()? {
                         event::Event::Key(event) => match event.code {
                             KeyCode::Up => data.menu.previous(),
                             KeyCode::Down => data.menu.next(),
