@@ -24,7 +24,6 @@ pub enum ServerStatus {
     TCPBindError(anyhow::Error),
 }
 
-
 pub struct Server {
     listener: Option<TcpListener>,
     pub local_ip: Option<IpAddr>,

@@ -5,7 +5,6 @@
 // TODO: Consider Flume vs. crossbeam_channel https://crates.io/crates/flume
 
 use anyhow::Result;
-use crossbeam_channel;
 use std::thread;
 use std::time;
 
@@ -18,8 +17,9 @@ mod settings;
 mod transmission;
 // use crate::transmission;
 mod ui;
-use ui::{StyledFilePath, StyledPathList};
 mod util;
+mod widget;
+use widget::{StyledFilePath, StyledPathList};
 
 fn main() -> Result<()> {
     // Initialize state machine
@@ -46,8 +46,7 @@ fn main() -> Result<()> {
     let ui = thread::Builder::new()
         .name("User Interface".to_string())
         .spawn(move || -> Result<()> {
-            ui::UI::run( app
-        )?;
+            ui::UI::run(app)?;
             Ok(())
         })?;
 
