@@ -12,14 +12,11 @@ use std::time;
 use tui::{
     self,
     backend::CrosstermBackend,
-    layout::{Constraint, Direction, Layout},
-    style,
-    widgets::{Block, Borders, List, ListItem},
 };
 
 use crate::util;
 use crate::widget;
-use scene::Scene;
+use scene::{Scene};
 use widget::{ScrollList, StyledPathList};
 
 // Inter-process messages between ui and backend
@@ -46,6 +43,17 @@ pub enum AppState {
 }
 
 mod scene {
+    use std::io;
+
+    use anyhow::{self, Result};
+    use tui::{
+        self,
+        backend::CrosstermBackend,
+        layout::{Constraint, Direction, Layout},
+        style,
+        widgets::{Block, Borders, List, ListItem},
+    };
+
     use crate::widget;
     use widget::{ScrollList, StyledPathList};
 
@@ -77,6 +85,62 @@ mod scene {
             scene.menu.next();
             scene
         }
+
+        pub fn draw(
+            &mut self,
+            terminal: &mut tui::Terminal<CrosstermBackend<io::Stdout>>,
+        ) -> Result<()> {
+            terminal.draw(|f| {
+                // UI sections
+                let split_horizontal = Layout::default()
+                    .direction(Direction::Vertical)
+                    .margin(1)
+                    .constraints([Constraint::Percentage(90), Constraint::Percentage(10)].as_ref())
+                    .split(f.size());
+
+                let split_vertical = Layout::default()
+                    .direction(Direction::Horizontal)
+                    .margin(0)
+                    .constraints([Constraint::Percentage(40), Constraint::Percentage(60)].as_ref())
+                    .split(split_horizontal[0]);
+
+                let split_horizontal_1 = Layout::default()
+                    .direction(Direction::Vertical)
+                    .margin(0)
+                    .constraints([Constraint::Percentage(50), Constraint::Percentage(50)].as_ref())
+                    .split(split_vertical[1]);
+
+                let style = style::Style::default();
+
+                let menu: Vec<ListItem> = self
+                    .menu
+                    .options
+                    .iter()
+                    .map(|i| ListItem::new(i.as_ref()))
+                    .collect();
+                let menu = List::new(menu)
+                    .block(Block::default().borders(Borders::ALL).title("Menu"))
+                    .style(style)
+                    .highlight_style(
+                        style
+                            .fg(style::Color::Rgb(253, 3, 166))
+                            .add_modifier(style::Modifier::BOLD),
+                    )
+                    .highlight_symbol("> ");
+                // f.render_widget(menu_frame, split_vertical[0]);
+                f.render_stateful_widget(menu, split_vertical[0], &mut self.menu.state);
+
+                let info = Block::default().title("Info").borders(Borders::ALL);
+                f.render_widget(info, split_horizontal[1]);
+
+                let sending = Block::default().title("Sending").borders(Borders::ALL);
+                f.render_widget(sending, split_horizontal_1[0]);
+
+                let receiving = Block::default().title("Receiving").borders(Borders::ALL);
+                f.render_widget(receiving, split_horizontal_1[1]);
+            })?;
+            Ok(())
+        }
     }
 
     pub struct EditFiles {
@@ -92,6 +156,36 @@ mod scene {
             };
             scene.file_paths.select_first();
             scene
+        }
+
+        pub fn draw(
+            &mut self,
+            terminal: &mut tui::Terminal<CrosstermBackend<io::Stdout>>,
+        ) -> Result<()> {
+            terminal.draw(|f| {
+                let style = style::Style::default();
+
+                let styled_paths = self.file_paths.get_styled_paths();
+                let file_paths: Vec<ListItem> = styled_paths
+                    .iter()
+                    .map(|i| ListItem::new(i.as_ref()))
+                    .collect();
+                let file_paths = List::new(file_paths)
+                    .block(Block::default().borders(Borders::ALL).title("Files"))
+                    .style(style)
+                    .highlight_style(
+                        style
+                            .fg(style::Color::Rgb(253, 3, 166))
+                            .add_modifier(style::Modifier::BOLD),
+                    )
+                    .highlight_symbol("> ");
+                // f.render_widget(menu_frame, split_vertical[0]);
+                f.render_stateful_widget(file_paths, f.size(), &mut self.file_paths.state);
+
+                let block = Block::default().borders(Borders::ALL);
+                f.render_widget(block, f.size());
+            })?;
+            Ok(())
         }
     }
 }
@@ -146,105 +240,18 @@ impl UI {
         Ok(())
     }
 
-    pub fn draw(&mut self, terminal: &mut tui::Terminal<CrosstermBackend<io::Stdout>>) -> Result<()> {
-        match self.scene {
-            Scene::EditFiles(_) => {
-                terminal
-                    .draw(|f| {
-                        let style = style::Style::default();
-
-                        if let Scene::EditFiles(data) = &mut self.scene {
-                            let styled_paths = data.file_paths.get_styled_paths();
-                            let file_paths: Vec<ListItem> = styled_paths
-                                .iter()
-                                .map(|i| ListItem::new(i.as_ref()))
-                                .collect();
-                            let file_paths = List::new(file_paths)
-                                .block(Block::default().borders(Borders::ALL).title("Files"))
-                                .style(style)
-                                .highlight_style(
-                                    style
-                                        .fg(style::Color::Rgb(253, 3, 166))
-                                        .add_modifier(style::Modifier::BOLD),
-                                )
-                                .highlight_symbol("> ");
-                            // f.render_widget(menu_frame, split_vertical[0]);
-                            f.render_stateful_widget(
-                                file_paths,
-                                f.size(),
-                                &mut data.file_paths.state,
-                            );
-                        }
-
-                        let block = Block::default().borders(Borders::ALL);
-                        f.render_widget(block, f.size());
-                    })?;
+    pub fn draw(
+        &mut self,
+        terminal: &mut tui::Terminal<CrosstermBackend<io::Stdout>>,
+    ) -> Result<()> {
+        match &mut self.scene {
+            Scene::EditFiles(scene) => scene.draw(terminal),
+            Scene::Home(scene) => scene.draw(terminal),
+            _ => {
+                todo!();
+                Ok(())
             }
-
-            Scene::Home(_) => {
-                terminal
-                    .draw(|f| {
-                        // UI sections
-                        let split_horizontal = Layout::default()
-                            .direction(Direction::Vertical)
-                            .margin(1)
-                            .constraints(
-                                [Constraint::Percentage(90), Constraint::Percentage(10)].as_ref(),
-                            )
-                            .split(f.size());
-
-                        let split_vertical = Layout::default()
-                            .direction(Direction::Horizontal)
-                            .margin(0)
-                            .constraints(
-                                [Constraint::Percentage(40), Constraint::Percentage(60)].as_ref(),
-                            )
-                            .split(split_horizontal[0]);
-
-                        let split_horizontal_1 = Layout::default()
-                            .direction(Direction::Vertical)
-                            .margin(0)
-                            .constraints(
-                                [Constraint::Percentage(50), Constraint::Percentage(50)].as_ref(),
-                            )
-                            .split(split_vertical[1]);
-
-                        let style = style::Style::default();
-
-                        if let Scene::Home(data) = &mut self.scene {
-                            let menu: Vec<ListItem> = data
-                                .menu
-                                .options
-                                .iter()
-                                .map(|i| ListItem::new(i.as_ref()))
-                                .collect();
-                            let menu = List::new(menu)
-                                .block(Block::default().borders(Borders::ALL).title("Menu"))
-                                .style(style)
-                                .highlight_style(
-                                    style
-                                        .fg(style::Color::Rgb(253, 3, 166))
-                                        .add_modifier(style::Modifier::BOLD),
-                                )
-                                .highlight_symbol("> ");
-                            // f.render_widget(menu_frame, split_vertical[0]);
-                            f.render_stateful_widget(menu, split_vertical[0], &mut data.menu.state);
-                        }
-
-                        let info = Block::default().title("Info").borders(Borders::ALL);
-                        f.render_widget(info, split_horizontal[1]);
-
-                        let sending = Block::default().title("Sending").borders(Borders::ALL);
-                        f.render_widget(sending, split_horizontal_1[0]);
-
-                        let receiving = Block::default().title("Receiving").borders(Borders::ALL);
-                        f.render_widget(receiving, split_horizontal_1[1]);
-                    })
-                    ?;
-            }
-            _ => todo!(),
         }
-        Ok(())
     }
 
     pub fn interact(&mut self) -> Result<()> {

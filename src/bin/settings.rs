@@ -3,3 +3,7 @@ pub struct Settings {
     pub progress_refresh_rate: u16,  // Update rate for progress bars at idle in Hz
     pub internal_logic_refresh_rate: u16,
 }
+
+mod config {}
+
+mod style {}
