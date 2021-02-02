@@ -46,6 +46,11 @@ mod scene {
     use std::io;
 
     use anyhow::{self, Result};
+    use crossterm::{
+        self,
+        event::{self, KeyCode},
+        ExecutableCommand,
+    };
     use tui::{
         self,
         backend::CrosstermBackend,
@@ -56,6 +61,9 @@ mod scene {
 
     use crate::widget;
     use widget::{ScrollList, StyledPathList};
+
+    use crate::ui;
+    use ui::{Data, Event, Message};
 
     pub enum Scene {
         EditFiles(EditFiles),
@@ -84,6 +92,18 @@ mod scene {
             };
             scene.menu.next();
             scene
+        }
+
+        pub fn interact(&mut self, event: event::Event) -> Result<Option<Message>> {
+            if let event::Event::Key(event) = event { match event.code {
+                    KeyCode::Up => self.menu.previous(),
+                    KeyCode::Down => self.menu.next(),
+                    KeyCode::Enter => if let Some(option) = self.menu.state.selected() {
+                            return Ok(Some(Message::Event(Event::Selection(option))));
+                    },
+                    _ => (),
+                }}
+            Ok((None))
         }
 
         pub fn draw(
@@ -158,6 +178,25 @@ mod scene {
             scene
         }
 
+        pub fn interact(&mut self, event: event::Event) -> Result<Option<Message>> {
+            if let event::Event::Key(event) = event {match event.code {
+                KeyCode::Backspace
+                | KeyCode::Char(_)
+                | KeyCode::Delete
+                | KeyCode::Down
+                | KeyCode::Enter
+                | KeyCode::Up => {self.file_paths.edit_selected(&event.code)?;},
+                KeyCode::Esc => {
+                    self.file_paths.edit_selected(&event.code)?;
+                    return Ok(Some(Message::Data(Data::FilePathList(self.file_paths.clone()))));
+                }
+
+                _ => (),
+            }
+        }
+            Ok(None)
+        }
+
         pub fn draw(
             &mut self,
             terminal: &mut tui::Terminal<CrosstermBackend<io::Stdout>>,
@@ -212,7 +251,7 @@ impl UI {
             clock: time::Instant::now(),
             frame_count: 0,
             last_frame: time::Instant::now(),
-            frame_changed: false,
+            frame_changed: true,
         };
 
         crossterm::terminal::enable_raw_mode()?;
@@ -255,51 +294,74 @@ impl UI {
     }
 
     pub fn interact(&mut self) -> Result<()> {
-        let mut frame_changed = true;
-
         if event::poll(time::Duration::from_secs(0))? {
-            match &mut self.scene {
-                Scene::EditFiles(data) => match event::read()? {
-                    event::Event::Key(event) => match event.code {
-                        KeyCode::Backspace
-                        | KeyCode::Char(_)
-                        | KeyCode::Delete
-                        | KeyCode::Down
-                        | KeyCode::Enter
-                        | KeyCode::Up => data.file_paths.edit_selected(&event.code)?,
-                        KeyCode::Esc => {
-                            data.file_paths.edit_selected(&event.code)?;
-                            self.application
-                                .send(Message::Data(Data::FilePathList(data.file_paths.clone())))?;
+            let event = event::read()?;
+            match event {
+                event::Event::Key(key) => match key.code {
+                    KeyCode::Backspace | KeyCode::Char(_) | KeyCode::Delete | KeyCode::Down | KeyCode::Enter | KeyCode::Up | KeyCode::Esc => {
+
+                        let message;
+                        match &mut self.scene {
+                            Scene::EditFiles(scene) => message = scene.interact(event)?,
+                            Scene::Home(scene) => message = scene.interact(event)?,
+                            _ => {
+                                todo!();
+                            }
                         }
 
-                        _ => (),
-                    },
-                    // _ => todo!(),
-                    _ => frame_changed = self.frame_changed,
-                },
-
-                Scene::Home(data) => {
-                    match event::read()? {
-                        event::Event::Key(event) => match event.code {
-                            KeyCode::Up => data.menu.previous(),
-                            KeyCode::Down => data.menu.next(),
-                            KeyCode::Enter => match data.menu.state.selected() {
-                                Some(option) => {
-                                    self.application
-                                        .send(Message::Event(Event::Selection(option)))?;
-                                }
-                                None => (),
-                            },
-                            _ => todo!(),
-                        },
-                        _ => frame_changed = self.frame_changed, // This is weird some kind of events trigger without user interaction, I guess...
-                    }
+                        // let message = self.scene.interact(event)?;
+                        if let Some(message) = message {
+                            self.application.send(message);
+                        }
+                        self.frame_changed = true;
+                    }, 
+                    _ => ()
                 }
-                _ => todo!(),
+                _ => ()
             }
+
+            // match &mut self.scene {
+            //     Scene::EditFiles(data) => match event::read()? {
+            //         // event::Event::Key(event) => match event.code {
+            //         //     KeyCode::Backspace
+            //         //     | KeyCode::Char(_)
+            //         //     | KeyCode::Delete
+            //         //     | KeyCode::Down
+            //         //     | KeyCode::Enter
+            //         //     | KeyCode::Up => data.file_paths.edit_selected(&event.code)?,
+            //         //     KeyCode::Esc => {
+            //         //         data.file_paths.edit_selected(&event.code)?;
+            //         //         self.application
+            //         //             .send(Message::Data(Data::FilePathList(data.file_paths.clone())))?;
+            //         //     }
+
+            //         //     _ => (),
+            //         // },
+            //         // // _ => todo!(),
+            //         // _ => frame_changed = self.frame_changed,
+            //     },
+
+            //     Scene::Home(data) => {
+            //         // match event::read()? {
+            //         //     event::Event::Key(event) => match event.code {
+            //         //         KeyCode::Up => data.menu.previous(),
+            //         //         KeyCode::Down => data.menu.next(),
+            //         //         KeyCode::Enter => match data.menu.state.selected() {
+            //         //             Some(option) => {
+            //         //                 self.application
+            //         //                     .send(Message::Event(Event::Selection(option)))?;
+            //         //             }
+            //         //             None => (),
+            //         //         },
+            //         //         _ => todo!(),
+            //         //     },
+            //         //     _ => frame_changed = self.frame_changed, // This is weird some kind of events trigger without user interaction, I guess...
+            //         // }
+                    
+            //     }
+            //     _ => todo!(),
+            // }
         }
-        self.frame_changed = frame_changed;
         Ok(())
     }
 
