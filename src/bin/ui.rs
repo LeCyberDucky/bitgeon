@@ -17,7 +17,7 @@ use tui::{
 use crate::util;
 use crate::widget;
 use scene::{Scene};
-use widget::{ScrollList, StyledPathList};
+use widget::{StyledPathList};
 
 // Inter-process messages between ui and backend
 // TODO: This should just be called Message
@@ -49,7 +49,6 @@ mod scene {
     use crossterm::{
         self,
         event::{self, KeyCode},
-        ExecutableCommand,
     };
     use tui::{
         self,
@@ -103,7 +102,7 @@ mod scene {
                     },
                     _ => (),
                 }}
-            Ok((None))
+            Ok(None)
         }
 
         pub fn draw(
@@ -233,9 +232,9 @@ pub struct UI {
     pub application: util::ThreadChannel<Message>,
     pub application_state: AppState,
     pub scene: Scene,
-    pub ui_refresh_rate: u16,
+    pub ui_refresh_rate: u128,
     pub clock: time::Instant,
-    pub frame_count: u64,
+    pub frame_count: u128,
     pub last_frame: time::Instant,
     pub frame_changed: bool,
 }
@@ -269,7 +268,7 @@ impl UI {
             }
             ui.interact()?; // User interaction
 
-            util::sleep_remaining_frame(&ui.clock, &mut ui.frame_count, &ui.ui_refresh_rate);
+            util::sleep_remaining_frame(&ui.clock, &mut ui.frame_count, ui.ui_refresh_rate);
         }
 
         // Reset terminal to initial state

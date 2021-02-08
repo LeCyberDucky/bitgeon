@@ -67,6 +67,7 @@ pub fn check_path(path_string: &str) -> Result<PathState> {
         return Ok(PathState::Invalid);
     }
 
+    // If the path is relative, trim it and add "./" to the beginning
     let trim_characters = ['\\', '/', '.'];
     if Path::new(&path).is_relative() && path.len() > 0 {
         let first_character = path.chars().next().unwrap(); // At least one character is contained, as given by the check above

@@ -32,7 +32,7 @@ pub struct LogicStateMachine {
     pub secret_key: String,
     pub state: State,
     pub clock: time::Instant,
-    pub frame_count: u64,
+    pub frame_count: u128,
     pub ui: util::ThreadChannel<ui::Message>,
     pub settings: settings::Settings,
     pub files_for_transmission: StyledPathList,
@@ -59,7 +59,7 @@ impl LogicStateMachine {
             util::sleep_remaining_frame(
                 &self.clock,
                 &mut self.frame_count,
-                &self.settings.internal_logic_refresh_rate,
+                self.settings.internal_logic_refresh_rate,
             );
         }
         ui_updates
