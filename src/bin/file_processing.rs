@@ -121,3 +121,26 @@ fn is_hidden_path(entry: &DirEntry) -> bool {
         .map(|s| s.starts_with("."))
         .unwrap_or(false)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    
+    #[test]
+    fn test_parse_paths() {
+        let input = r"C:\Users\USERNAME\images\ferris.jpg C:\Users\USERNAME\images; /images/; /images/ferris.jpg";
+
+        let output = parse_paths(input);
+
+        println!("{:#?}", output);
+
+        let expected_output =vec![
+            "C:\\Users\\USERNAME\\images\\ferris.jpg",
+            "C:\\Users\\USERNAME\\images",
+            "/images/",
+            "/images/ferris.jpg",
+        ];
+
+        assert_eq!(output.unwrap(), expected_output)
+    }
+}
