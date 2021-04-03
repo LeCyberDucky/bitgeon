@@ -31,7 +31,7 @@ pub fn parse_paths(path_string: &str) -> Result<Vec<String>> {
     // }
     static RE: Lazy<Regex> = Lazy::new(|| {
         Regex::new(r"((?:[A-z]:.+?(?=[A-z]:|$|\n|;))|(?:.+?(?=;|$|\n|[A-z]:)))").unwrap()
-        // unwrap is fine because if the regex compiles once, it will always compile
+        // unwrap is fine because if the regex compiles once, it should always compile
     });
 
     let mut capture_pos = 0;
@@ -141,6 +141,19 @@ mod tests {
             "/images/ferris.jpg",
         ];
 
-        assert_eq!(output.unwrap(), expected_output)
+        assert_eq!(output.unwrap(), expected_output);
+
+        let input = r"aklæsjdagklsdjfskhgdælaC:\Users\USERNAME\OneDrive\Documents\USER home\Programming\Projects\bitgeon\src\bin\ui.rs";
+
+        let output = parse_paths(input);
+
+        println!("{:#?}", output);
+
+        let expected_output =vec![
+            r"aklæsjdagklsdjfskhgdæla",
+            r"C:\Users\USERNAME\OneDrive\Documents\USER home\Programming\Projects\bitgeon\src\bin\ui.rs",
+        ];
+
+        assert_eq!(output.unwrap(), expected_output);
     }
 }

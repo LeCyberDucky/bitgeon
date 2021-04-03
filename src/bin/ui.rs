@@ -254,6 +254,7 @@ impl UI {
         };
 
         crossterm::terminal::enable_raw_mode()?;
+        io::stdout().execute(crossterm::terminal::EnableLineWrap)?;
         io::stdout().execute(crossterm::terminal::EnterAlternateScreen)?;
         io::stdout().execute(crossterm::cursor::Hide)?;
         let mut terminal = tui::Terminal::new(CrosstermBackend::new(io::stdout()))?;
