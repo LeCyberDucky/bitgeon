@@ -125,7 +125,7 @@ fn is_hidden_path(entry: &DirEntry) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_parse_paths() {
         let input = r"C:\Users\USERNAME\images\ferris.jpg C:\Users\USERNAME\images; /images/; /images/ferris.jpg";
@@ -134,7 +134,7 @@ mod tests {
 
         println!("{:#?}", output);
 
-        let expected_output =vec![
+        let expected_output = vec![
             "C:\\Users\\USERNAME\\images\\ferris.jpg",
             "C:\\Users\\USERNAME\\images",
             "/images/",
@@ -149,7 +149,7 @@ mod tests {
 
         println!("{:#?}", output);
 
-        let expected_output =vec![
+        let expected_output = vec![
             r"aklæsjdagklsdjfskhgdæla",
             r"C:\Users\USERNAME\OneDrive\Documents\USER home\Programming\Projects\bitgeon\src\bin\ui.rs",
         ];

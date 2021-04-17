@@ -6,40 +6,21 @@
 
 use anyhow::Result;
 use std::thread;
-use std::time;
 
 mod file_processing;
 mod logic_state_machine;
 use logic_state_machine::LogicStateMachine;
-use logic_state_machine::State;
 mod settings;
 mod transmission;
 // use crate::transmission;
 mod ui;
 mod util;
 mod widget;
-use widget::{StyledFilePath, StyledPathList};
 
 fn main() -> Result<()> {
     // Initialize state machine
     let (ui, app) = util::ThreadChannel::new_pair();
-    let mut application = LogicStateMachine {
-        secret_key: String::from("Swordfish"),
-        state: State(LogicStateMachine::init),
-        clock: time::Instant::now(),
-        frame_count: 0,
-        ui,
-        settings: settings::Settings {
-            interface_refresh_rate: 60,
-            progress_refresh_rate: 4,
-            internal_logic_refresh_rate: 60,
-        },
-        files_for_transmission: StyledPathList::new(
-            String::from("Edit paths below, or simply drag and drop files or directories here:"),
-            vec![StyledFilePath::new("")],
-        ),
-        server: transmission::Server::new(),
-    };
+    let mut application = LogicStateMachine::new(ui);
 
     // Setup UI
     let ui = thread::Builder::new()

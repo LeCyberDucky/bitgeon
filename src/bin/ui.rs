@@ -1,26 +1,20 @@
-use anyhow::{self, Result};
+use std::io;
+use std::time;
 
+use anyhow::{self, Result};
 use crossterm::{
     self,
     event::{self, KeyCode},
     ExecutableCommand,
 };
-
-use std::io;
-use std::time;
-
-use tui::{
-    self,
-    backend::CrosstermBackend,
-};
+use tui::{self, backend::CrosstermBackend};
 
 use crate::util;
 use crate::widget;
-use scene::{Scene};
-use widget::{StyledPathList};
+use scene::Scene;
+use widget::StyledPathList;
 
 // Inter-process messages between ui and backend
-// TODO: This should just be called Message
 pub enum Message {
     Data(Data),
     Event(Event),
@@ -42,6 +36,189 @@ pub enum AppState {
     Initialization,
 }
 
+pub struct UI {
+    pub application: util::ThreadChannel<Message>,
+    pub application_state: AppState,
+    pub scene: Scene,
+    pub ui_refresh_rate: u128,
+    pub clock: time::Instant,
+    pub frame_count: u128,
+    pub last_frame: time::Instant,
+    pub frame_changed: bool,
+}
+
+impl UI {
+    pub fn run(application: util::ThreadChannel<Message>) -> Result<()> {
+        // Setup
+        let mut ui = UI {
+            application,
+            application_state: AppState::Initialization,
+            scene: Scene::Home(scene::Home::new(String::from(""))),
+            ui_refresh_rate: 60,
+            clock: time::Instant::now(),
+            frame_count: 0,
+            last_frame: time::Instant::now(),
+            frame_changed: true,
+        };
+
+        crossterm::terminal::enable_raw_mode()?;
+        io::stdout().execute(crossterm::terminal::EnableLineWrap)?;
+        io::stdout().execute(crossterm::terminal::EnterAlternateScreen)?;
+        io::stdout().execute(crossterm::cursor::Hide)?;
+        let mut terminal = tui::Terminal::new(CrosstermBackend::new(io::stdout()))?;
+
+        // TODO: Figure out what is happening here and document that in a comment
+        while std::mem::discriminant(&ui.scene) != std::mem::discriminant(&Scene::End) {
+            ui.update();
+            if ui.frame_changed {
+                // Visual change necessitates redraw
+                ui.frame_changed = false;
+                ui.draw(&mut terminal)?;
+            }
+            ui.interact()?; // User interaction
+
+            util::sleep_remaining_frame(&ui.clock, &mut ui.frame_count, ui.ui_refresh_rate);
+        }
+
+        // Reset terminal to initial state
+        crossterm::terminal::disable_raw_mode()?;
+        io::stdout().execute(crossterm::terminal::LeaveAlternateScreen)?;
+        io::stdout().execute(crossterm::cursor::Show)?;
+        Ok(())
+    }
+
+    pub fn draw(
+        &mut self,
+        terminal: &mut tui::Terminal<CrosstermBackend<io::Stdout>>,
+    ) -> Result<()> {
+        match &mut self.scene {
+            Scene::EditFiles(scene) => scene.draw(terminal),
+            Scene::Home(scene) => scene.draw(terminal),
+            _ => {
+                todo!();
+                Ok(())
+            }
+        }
+    }
+
+    pub fn interact(&mut self) -> Result<()> {
+        if event::poll(time::Duration::from_secs(0))? {
+            let event = event::read()?;
+            match event {
+                event::Event::Key(key) => match key.code {
+                    KeyCode::Backspace
+                    | KeyCode::Char(_)
+                    | KeyCode::Delete
+                    | KeyCode::Down
+                    | KeyCode::Enter
+                    | KeyCode::Up
+                    | KeyCode::Esc => {
+                        let message;
+                        match &mut self.scene {
+                            Scene::EditFiles(scene) => message = scene.interact(event)?,
+                            Scene::Home(scene) => message = scene.interact(event)?,
+                            _ => {
+                                todo!();
+                            }
+                        }
+
+                        // let message = self.scene.interact(event)?;
+                        if let Some(message) = message {
+                            self.application.send(message);
+                        }
+                        self.frame_changed = true;
+                    }
+                    _ => (),
+                },
+                _ => (),
+            }
+
+            // match &mut self.scene {
+            //     Scene::EditFiles(data) => match event::read()? {
+            //         // event::Event::Key(event) => match event.code {
+            //         //     KeyCode::Backspace
+            //         //     | KeyCode::Char(_)
+            //         //     | KeyCode::Delete
+            //         //     | KeyCode::Down
+            //         //     | KeyCode::Enter
+            //         //     | KeyCode::Up => data.file_paths.edit_selected(&event.code)?,
+            //         //     KeyCode::Esc => {
+            //         //         data.file_paths.edit_selected(&event.code)?;
+            //         //         self.application
+            //         //             .send(Message::Data(Data::FilePathList(data.file_paths.clone())))?;
+            //         //     }
+
+            //         //     _ => (),
+            //         // },
+            //         // // _ => todo!(),
+            //         // _ => frame_changed = self.frame_changed,
+            //     },
+
+            //     Scene::Home(data) => {
+            //         // match event::read()? {
+            //         //     event::Event::Key(event) => match event.code {
+            //         //         KeyCode::Up => data.menu.previous(),
+            //         //         KeyCode::Down => data.menu.next(),
+            //         //         KeyCode::Enter => match data.menu.state.selected() {
+            //         //             Some(option) => {
+            //         //                 self.application
+            //         //                     .send(Message::Event(Event::Selection(option)))?;
+            //         //             }
+            //         //             None => (),
+            //         //         },
+            //         //         _ => todo!(),
+            //         //     },
+            //         //     _ => frame_changed = self.frame_changed, // This is weird some kind of events trigger without user interaction, I guess...
+            //         // }
+
+            //     }
+            //     _ => todo!(),
+            // }
+        }
+        Ok(())
+    }
+
+    pub fn update(&mut self) {
+        // Get updates from logic of the program. Progress for progress bars for example
+        let app_updates = self.application.receive();
+
+        if app_updates.len() > 0 {
+            for message in app_updates {
+                match message {
+                    Message::Event(event) => match event {
+                        Event::StateChange(state) => {
+                            self.application_state = state;
+                            self.scene = match &self.application_state {
+                                AppState::EditFiles(file_list) => {
+                                    Scene::EditFiles(scene::EditFiles::new(file_list.to_owned()))
+                                }
+                                AppState::End => Scene::End,
+                                AppState::Home(connection_info) => {
+                                    Scene::Home(scene::Home::new(connection_info.to_owned()))
+                                }
+                                AppState::Initialization => todo!(),
+                            }
+                        }
+                        Event::Selection(_option) => todo!(),
+                    },
+                    _ => todo!(),
+                }
+            }
+            self.frame_changed = true;
+        }
+    }
+
+    pub fn period_elapsed(&self, count: &u64, rate: &u16) -> bool {
+        self.clock.elapsed().as_micros() >= *count as u128 * 1000 / *rate as u128
+        // Should we be using floating point values here?
+    }
+
+    // pub fn frame_elapsed(&self) -> bool {
+    //     // self.period_elapsed(&self.frame_count, &self.ui_refresh_rate)
+    //     util::period_elapsed(&self.clock, &self.frame_count, &self.ui_refresh_rate)
+    // }
+}
+
 mod scene {
     use std::io;
 
@@ -58,11 +235,11 @@ mod scene {
         widgets::{Block, Borders, List, ListItem},
     };
 
-    use crate::widget;
-    use widget::{ScrollList, StyledPathList};
-
     use crate::ui;
+    use crate::widget;
+
     use ui::{Data, Event, Message};
+    use widget::{ScrollList, StyledPathList};
 
     pub enum Scene {
         EditFiles(EditFiles),
@@ -94,14 +271,18 @@ mod scene {
         }
 
         pub fn interact(&mut self, event: event::Event) -> Result<Option<Message>> {
-            if let event::Event::Key(event) = event { match event.code {
+            if let event::Event::Key(event) = event {
+                match event.code {
                     KeyCode::Up => self.menu.previous(),
                     KeyCode::Down => self.menu.next(),
-                    KeyCode::Enter => if let Some(option) = self.menu.state.selected() {
+                    KeyCode::Enter => {
+                        if let Some(option) = self.menu.state.selected() {
                             return Ok(Some(Message::Event(Event::Selection(option))));
-                    },
+                        }
+                    }
                     _ => (),
-                }}
+                }
+            }
             Ok(None)
         }
 
@@ -178,21 +359,26 @@ mod scene {
         }
 
         pub fn interact(&mut self, event: event::Event) -> Result<Option<Message>> {
-            if let event::Event::Key(event) = event {match event.code {
-                KeyCode::Backspace
-                | KeyCode::Char(_)
-                | KeyCode::Delete
-                | KeyCode::Down
-                | KeyCode::Enter
-                | KeyCode::Up => {self.file_paths.edit_selected(&event.code)?;},
-                KeyCode::Esc => {
-                    self.file_paths.edit_selected(&event.code)?;
-                    return Ok(Some(Message::Data(Data::FilePathList(self.file_paths.clone()))));
-                }
+            if let event::Event::Key(event) = event {
+                match event.code {
+                    KeyCode::Backspace
+                    | KeyCode::Char(_)
+                    | KeyCode::Delete
+                    | KeyCode::Down
+                    | KeyCode::Enter
+                    | KeyCode::Up => {
+                        self.file_paths.edit_selected(&event.code)?;
+                    }
+                    KeyCode::Esc => {
+                        self.file_paths.edit_selected(&event.code)?;
+                        return Ok(Some(Message::Data(Data::FilePathList(
+                            self.file_paths.clone(),
+                        ))));
+                    }
 
-                _ => (),
+                    _ => (),
+                }
             }
-        }
             Ok(None)
         }
 
@@ -226,182 +412,4 @@ mod scene {
             Ok(())
         }
     }
-}
-
-pub struct UI {
-    pub application: util::ThreadChannel<Message>,
-    pub application_state: AppState,
-    pub scene: Scene,
-    pub ui_refresh_rate: u128,
-    pub clock: time::Instant,
-    pub frame_count: u128,
-    pub last_frame: time::Instant,
-    pub frame_changed: bool,
-}
-
-impl UI {
-    pub fn run(application: util::ThreadChannel<Message>) -> Result<()> {
-        // Setup
-        let mut ui = UI {
-            application,
-            application_state: AppState::Initialization,
-            scene: Scene::Home(scene::Home::new(String::from(""))),
-            ui_refresh_rate: 60,
-            clock: time::Instant::now(),
-            frame_count: 0,
-            last_frame: time::Instant::now(),
-            frame_changed: true,
-        };
-
-        crossterm::terminal::enable_raw_mode()?;
-        io::stdout().execute(crossterm::terminal::EnableLineWrap)?;
-        io::stdout().execute(crossterm::terminal::EnterAlternateScreen)?;
-        io::stdout().execute(crossterm::cursor::Hide)?;
-        let mut terminal = tui::Terminal::new(CrosstermBackend::new(io::stdout()))?;
-
-        // TODO: Figure out what is happening here and document that in a comment
-        while std::mem::discriminant(&ui.scene) != std::mem::discriminant(&Scene::End) {
-            ui.update();
-            if ui.frame_changed {
-                // Visual change necessitates redraw
-                ui.frame_changed = false;
-                ui.draw(&mut terminal)?;
-            }
-            ui.interact()?; // User interaction
-
-            util::sleep_remaining_frame(&ui.clock, &mut ui.frame_count, ui.ui_refresh_rate);
-        }
-
-        // Reset terminal to initial state
-        crossterm::terminal::disable_raw_mode()?;
-        io::stdout().execute(crossterm::terminal::LeaveAlternateScreen)?;
-        io::stdout().execute(crossterm::cursor::Show)?;
-        Ok(())
-    }
-
-    pub fn draw(
-        &mut self,
-        terminal: &mut tui::Terminal<CrosstermBackend<io::Stdout>>,
-    ) -> Result<()> {
-        match &mut self.scene {
-            Scene::EditFiles(scene) => scene.draw(terminal),
-            Scene::Home(scene) => scene.draw(terminal),
-            _ => {
-                todo!();
-                Ok(())
-            }
-        }
-    }
-
-    pub fn interact(&mut self) -> Result<()> {
-        if event::poll(time::Duration::from_secs(0))? {
-            let event = event::read()?;
-            match event {
-                event::Event::Key(key) => match key.code {
-                    KeyCode::Backspace | KeyCode::Char(_) | KeyCode::Delete | KeyCode::Down | KeyCode::Enter | KeyCode::Up | KeyCode::Esc => {
-
-                        let message;
-                        match &mut self.scene {
-                            Scene::EditFiles(scene) => message = scene.interact(event)?,
-                            Scene::Home(scene) => message = scene.interact(event)?,
-                            _ => {
-                                todo!();
-                            }
-                        }
-
-                        // let message = self.scene.interact(event)?;
-                        if let Some(message) = message {
-                            self.application.send(message);
-                        }
-                        self.frame_changed = true;
-                    }, 
-                    _ => ()
-                }
-                _ => ()
-            }
-
-            // match &mut self.scene {
-            //     Scene::EditFiles(data) => match event::read()? {
-            //         // event::Event::Key(event) => match event.code {
-            //         //     KeyCode::Backspace
-            //         //     | KeyCode::Char(_)
-            //         //     | KeyCode::Delete
-            //         //     | KeyCode::Down
-            //         //     | KeyCode::Enter
-            //         //     | KeyCode::Up => data.file_paths.edit_selected(&event.code)?,
-            //         //     KeyCode::Esc => {
-            //         //         data.file_paths.edit_selected(&event.code)?;
-            //         //         self.application
-            //         //             .send(Message::Data(Data::FilePathList(data.file_paths.clone())))?;
-            //         //     }
-
-            //         //     _ => (),
-            //         // },
-            //         // // _ => todo!(),
-            //         // _ => frame_changed = self.frame_changed,
-            //     },
-
-            //     Scene::Home(data) => {
-            //         // match event::read()? {
-            //         //     event::Event::Key(event) => match event.code {
-            //         //         KeyCode::Up => data.menu.previous(),
-            //         //         KeyCode::Down => data.menu.next(),
-            //         //         KeyCode::Enter => match data.menu.state.selected() {
-            //         //             Some(option) => {
-            //         //                 self.application
-            //         //                     .send(Message::Event(Event::Selection(option)))?;
-            //         //             }
-            //         //             None => (),
-            //         //         },
-            //         //         _ => todo!(),
-            //         //     },
-            //         //     _ => frame_changed = self.frame_changed, // This is weird some kind of events trigger without user interaction, I guess...
-            //         // }
-                    
-            //     }
-            //     _ => todo!(),
-            // }
-        }
-        Ok(())
-    }
-
-    pub fn update(&mut self) {
-        // Get updates from logic of the program. Progress for progress bars for example
-        let app_updates = self.application.receive();
-
-        if app_updates.len() > 0 {
-            for message in app_updates {
-                match message {
-                    Message::Event(event) => match event {
-                        Event::StateChange(state) => {
-                            self.application_state = state;
-                            self.scene = match &self.application_state {
-                                AppState::EditFiles(file_list) => {
-                                    Scene::EditFiles(scene::EditFiles::new(file_list.to_owned()))
-                                }
-                                AppState::End => Scene::End,
-                                AppState::Home(connection_info) => {
-                                    Scene::Home(scene::Home::new(connection_info.to_owned()))
-                                }
-                                AppState::Initialization => todo!(),
-                            }
-                        }
-                        Event::Selection(_option) => todo!(),
-                    },
-                    _ => todo!(),
-                }
-            }
-            self.frame_changed = true;
-        }
-    }
-
-    pub fn period_elapsed(&self, count: &u64, rate: &u16) -> bool {
-        self.clock.elapsed().as_micros() >= *count as u128 * 1000 / *rate as u128
-        // Should we be using floating point values here?
-    }
-
-    // pub fn frame_elapsed(&self) -> bool {
-    //     // self.period_elapsed(&self.frame_count, &self.ui_refresh_rate)
-    //     util::period_elapsed(&self.clock, &self.frame_count, &self.ui_refresh_rate)
-    // }
 }

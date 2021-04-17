@@ -7,7 +7,7 @@ use crate::settings;
 use crate::transmission;
 use crate::ui::{self, AppState, Data};
 use crate::util;
-use crate::widget::StyledPathList;
+use crate::widget::{StyledFilePath, StyledPathList};
 
 pub struct State(pub fn(&mut LogicStateMachine) -> Result<State>);
 
@@ -34,12 +34,30 @@ pub struct LogicStateMachine {
     pub clock: time::Instant,
     pub frame_count: u128,
     pub ui: util::ThreadChannel<ui::Message>,
-    pub settings: settings::Settings,
+    pub settings: settings::LogicSettings,
     pub files_for_transmission: StyledPathList,
     pub server: transmission::Server,
 }
 
 impl LogicStateMachine {
+    pub fn new(ui: util::ThreadChannel<ui::Message>) -> Self {
+        Self {
+            secret_key: String::from("Swordfish"),
+            state: State(LogicStateMachine::init),
+            clock: time::Instant::now(),
+            frame_count: 0,
+            ui,
+            settings: settings::LogicSettings::default(),
+            files_for_transmission: StyledPathList::new(
+                String::from(
+                    "Edit paths below, or simply drag and drop files or directories here:",
+                ),
+                vec![StyledFilePath::new("")],
+            ),
+            server: transmission::Server::new(),
+        }
+    }
+
     pub fn run(&mut self) -> Result<()> {
         while self.state != State(LogicStateMachine::exit) {
             self.state = (self.state)(self)?;
@@ -81,6 +99,8 @@ impl LogicStateMachine {
                 ui::Message::Event(_) => todo!(),
             }
         }
+
+        dbg!("Done with editing files. Going back home. 🏠");
 
         Ok(State(Self::home))
     }
