@@ -3,7 +3,8 @@ use std::path::Path;
 
 use anyhow::{Context, Result};
 use fancy_regex::Regex;
-use lazy_static::lazy_static;
+// use lazy_static::lazy_static;
+use once_cell::sync::Lazy;
 use path_absolutize::*;
 use walkdir::{DirEntry, WalkDir};
 
@@ -24,10 +25,14 @@ pub fn parse_paths(path_string: &str) -> Result<Vec<String>> {
     // Used to split strings containing multiple file paths into individual paths. Relative paths should be separated using semicolons. Absolute paths need only be separated by spaces (at least for absolute windows-file paths)
     // Example: The following string should be split into four paths:
     // r"C:\Users\USERNAME\images\ferris.jpg C:\Users\USERNAME\images; /images/; /images/ferris.jpg"
-    lazy_static! {
-        static ref RE: Regex =
-            Regex::new(r"((?:[A-z]:.+?(?=[A-z]:|$|\n|;))|(?:.+?(?=;|$|\n|[A-z]:)))").unwrap(); // unwrap is fine because if the regex compiles once, it will always compile
-    }
+    // lazy_static! {
+    //     static ref RE: Regex =
+    //         Regex::new(r"((?:[A-z]:.+?(?=[A-z]:|$|\n|;))|(?:.+?(?=;|$|\n|[A-z]:)))").unwrap(); // unwrap is fine because if the regex compiles once, it will always compile
+    // }
+    static RE: Lazy<Regex> = Lazy::new(|| {
+        Regex::new(r"((?:[A-z]:.+?(?=[A-z]:|$|\n|;))|(?:.+?(?=;|$|\n|[A-z]:)))").unwrap()
+        // unwrap is fine because if the regex compiles once, it should always compile
+    });
 
     let mut capture_pos = 0;
     while capture_pos < path_string.len() {
@@ -62,9 +67,10 @@ pub fn check_path(path_string: &str) -> Result<PathState> {
         return Ok(PathState::Invalid);
     }
 
+    // If the path is relative, trim it and add "./" to the beginning
     let trim_characters = ['\\', '/', '.'];
     if Path::new(&path).is_relative() && path.len() > 0 {
-        let first_character = path.chars().next().unwrap();
+        let first_character = path.chars().next().unwrap(); // At least one character is contained, as given by the check above
         if first_character != '.' {
             path = path
                 .trim_start_matches(|c: char| c.is_whitespace() || trim_characters.contains(&c))
@@ -93,6 +99,7 @@ pub fn check_path(path_string: &str) -> Result<PathState> {
     if path.is_dir() {
         let mut element_count = 0;
 
+        // TODO: Speed this up
         for entry in WalkDir::new(path).into_iter().filter_map(|e| e.ok()) {
             if !is_hidden_path(&entry) && !entry.metadata()?.is_dir() {
                 element_count += 1;
@@ -113,4 +120,40 @@ fn is_hidden_path(entry: &DirEntry) -> bool {
         .to_str()
         .map(|s| s.starts_with("."))
         .unwrap_or(false)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_paths() {
+        let input = r"C:\Users\USERNAME\images\ferris.jpg C:\Users\USERNAME\images; /images/; /images/ferris.jpg";
+
+        let output = parse_paths(input);
+
+        println!("{:#?}", output);
+
+        let expected_output = vec![
+            "C:\\Users\\USERNAME\\images\\ferris.jpg",
+            "C:\\Users\\USERNAME\\images",
+            "/images/",
+            "/images/ferris.jpg",
+        ];
+
+        assert_eq!(output.unwrap(), expected_output);
+
+        let input = r"aklæsjdagklsdjfskhgdælaC:\Users\USERNAME\OneDrive\Documents\USER home\Programming\Projects\bitgeon\src\bin\ui.rs";
+
+        let output = parse_paths(input);
+
+        println!("{:#?}", output);
+
+        let expected_output = vec![
+            r"aklæsjdagklsdjfskhgdæla",
+            r"C:\Users\USERNAME\OneDrive\Documents\USER home\Programming\Projects\bitgeon\src\bin\ui.rs",
+        ];
+
+        assert_eq!(output.unwrap(), expected_output);
+    }
 }

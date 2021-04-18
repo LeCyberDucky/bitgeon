@@ -4,8 +4,10 @@ use std::time;
 use anyhow::Result;
 
 use crate::settings;
-use crate::ui::{AppState, StyledPathList, UIData, UIEvent, UIMessage};
+use crate::transmission;
+use crate::ui::{self, AppState, Data};
 use crate::util;
+use crate::widget::{StyledFilePath, StyledPathList};
 
 pub struct State(pub fn(&mut LogicStateMachine) -> Result<State>);
 
@@ -30,13 +32,32 @@ pub struct LogicStateMachine {
     pub secret_key: String,
     pub state: State,
     pub clock: time::Instant,
-    pub frame_count: u64,
-    pub ui: util::Channel<UIMessage>,
-    pub settings: settings::Settings,
+    pub frame_count: u128,
+    pub ui: util::ThreadChannel<ui::Message>,
+    pub settings: settings::LogicSettings,
     pub files_for_transmission: StyledPathList,
+    pub server: transmission::Server,
 }
 
 impl LogicStateMachine {
+    pub fn new(ui: util::ThreadChannel<ui::Message>) -> Self {
+        Self {
+            secret_key: String::from("Swordfish"),
+            state: State(LogicStateMachine::init),
+            clock: time::Instant::now(),
+            frame_count: 0,
+            ui,
+            settings: settings::LogicSettings::default(),
+            files_for_transmission: StyledPathList::new(
+                String::from(
+                    "Edit paths below, or simply drag and drop files or directories here:",
+                ),
+                vec![StyledFilePath::new("")],
+            ),
+            server: transmission::Server::new(),
+        }
+    }
+
     pub fn run(&mut self) -> Result<()> {
         while self.state != State(LogicStateMachine::exit) {
             self.state = (self.state)(self)?;
@@ -44,7 +65,7 @@ impl LogicStateMachine {
         Ok(())
     }
 
-    pub fn wait_for_input(&mut self) -> Vec<UIMessage> {
+    pub fn wait_for_input(&mut self) -> Vec<ui::Message> {
         let mut ui_updates;
         loop {
             // interact with ui
@@ -56,36 +77,37 @@ impl LogicStateMachine {
             util::sleep_remaining_frame(
                 &self.clock,
                 &mut self.frame_count,
-                &self.settings.internal_logic_refresh_rate,
+                self.settings.internal_logic_refresh_rate,
             );
         }
         ui_updates
     }
 
-    pub fn add_files(&mut self) -> Result<State> {
-        self.ui
-            .send(UIMessage::Event(UIEvent::StateChange(AppState::AddFiles(
-                self.files_for_transmission.clone(),
-            ))))?;
+    pub fn edit_files(&mut self) -> Result<State> {
+        self.ui.send(ui::Message::Event(ui::Event::StateChange(
+            AppState::EditFiles(self.files_for_transmission.clone()),
+        )))?;
 
         let ui_updates = self.wait_for_input();
 
         for message in ui_updates {
             match message {
-                UIMessage::Data(ui_data) => {
-                    let UIData::FilePathList(file_paths) = ui_data;
+                ui::Message::Data(ui_data) => {
+                    let Data::FilePathList(file_paths) = ui_data;
                     self.files_for_transmission = file_paths;
                 }
-                UIMessage::Event(_) => todo!(),
+                ui::Message::Event(_) => todo!(),
             }
         }
+
+        dbg!("Done with editing files. Going back home. 🏠");
 
         Ok(State(Self::home))
     }
 
     pub fn end(&mut self) -> Result<State> {
         self.ui
-            .send(UIMessage::Event(UIEvent::StateChange(AppState::End)))?;
+            .send(ui::Message::Event(ui::Event::StateChange(AppState::End)))?;
         Ok(State(Self::exit))
     }
 
@@ -94,16 +116,20 @@ impl LogicStateMachine {
     }
 
     pub fn home(&mut self) -> Result<State> {
-        self.ui
-            .send(UIMessage::Event(UIEvent::StateChange(AppState::Home)))?;
+        // self.ui
+        //     .send(ui::Message::Event(ui::Event::StateChange(AppState::Home({
+        //         let ip = self.server.public_ip.to_string();
+        //         let port = self.server.external_port.to_string();
+        //         format!("{}:{}", ip, port)
+        //     }))))?;
 
         let ui_updates = self.wait_for_input();
 
         for message in ui_updates {
             match message {
-                UIMessage::Event(event) => match event {
-                    UIEvent::Selection(selection) => match selection {
-                        0 => return Ok(State(Self::add_files)),
+                ui::Message::Event(event) => match event {
+                    ui::Event::Selection(selection) => match selection {
+                        0 => return Ok(State(Self::edit_files)),
                         1 => return Ok(State(Self::receive)),
                         2 => return Ok(State(Self::end)),
                         _ => todo!(),
@@ -118,10 +144,12 @@ impl LogicStateMachine {
     }
 
     pub fn init(&mut self) -> Result<State> {
+        // Setup TCP listener
         Ok(State(Self::home))
     }
 
     pub fn receive(&mut self) -> Result<State> {
+        todo!();
         Ok(State(Self::home))
     }
 }
