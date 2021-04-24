@@ -7,6 +7,9 @@ use std::time;
 use anyhow::{anyhow, Context, Result};
 use thiserror::Error;
 
+use crate::ui;
+use crate::util;
+
 // TODO: Figure out how this error handling should actually be done
 #[derive(Debug, Error)]
 pub enum ServerStatus {
@@ -24,6 +27,7 @@ pub enum ServerStatus {
     TCPBindError(anyhow::Error),
 }
 
+
 pub struct Server {
     listener: Option<TcpListener>,
     pub local_ip: Option<IpAddr>,
@@ -34,10 +38,13 @@ pub struct Server {
     upnp_lease_duration: time::Duration,
     peers: Vec<Peer>,
     pub status: ServerStatus, // Should we have a vector of errors or only store one at a time?
+    // application: util::ThreadChannel<Message>,
+    ui: util::ThreadChannel<ui::Message>,
+    clock: time::Instant,
 }
 
 impl Server {
-    pub fn new() -> Server {
+    pub fn new(ui: util::ThreadChannel::<ui::Message>) -> Server {
         let mut server = Server {
             listener: None,
             local_ip: None,
@@ -48,6 +55,9 @@ impl Server {
             upnp_lease_duration: time::Duration::from_secs(60 * 15), // TODO: Don't hard code this. Read from config file but also provide default value
             peers: vec![],
             status: ServerStatus::Ok,
+            ui,
+            // application,
+            clock: time::Instant::now(),
         };
 
         server.refresh_connection();
@@ -185,6 +195,7 @@ impl Server {
     }
 }
 
+#[derive(Debug)]
 pub struct Peer {
     tcp_stream: TcpStream,
 }

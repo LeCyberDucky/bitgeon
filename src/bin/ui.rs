@@ -15,20 +15,24 @@ use scene::Scene;
 use widget::StyledPathList;
 
 // Inter-process messages between ui and backend
+#[derive(Clone)]
 pub enum Message {
     Data(Data),
     Event(Event),
 }
 
+#[derive(Clone)]
 pub enum Data {
     FilePathList(StyledPathList),
 }
 
+#[derive(Clone)]
 pub enum Event {
     Selection(usize),
     StateChange(AppState),
 }
 
+#[derive(Clone)]
 pub enum AppState {
     EditFiles(StyledPathList),
     End,

@@ -9,26 +9,26 @@ use crate::ui::{self, AppState, Data};
 use crate::util;
 use crate::widget::{StyledFilePath, StyledPathList};
 
-pub struct State(pub fn(&mut LogicStateMachine) -> Result<State>);
+pub struct State(pub fn(&mut Application) -> Result<State>);
 
 // Used for comparing states
 impl PartialEq for State {
     fn eq(&self, rhs: &Self) -> bool {
-        self.0 as *const fn(&mut LogicStateMachine) -> State
-            == rhs.0 as *const fn(&mut LogicStateMachine) -> State
+        self.0 as *const fn(&mut Application) -> State
+            == rhs.0 as *const fn(&mut Application) -> State
     }
 }
 
 // Without this, transitions would have this zero thing: state = state.0(&mut machine);
 impl Deref for State {
-    type Target = fn(&mut LogicStateMachine) -> Result<State>;
+    type Target = fn(&mut Application) -> Result<State>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
 
-pub struct LogicStateMachine {
+pub struct Application {
     pub secret_key: String,
     pub state: State,
     pub clock: time::Instant,
@@ -39,13 +39,14 @@ pub struct LogicStateMachine {
     pub server: transmission::Server,
 }
 
-impl LogicStateMachine {
+impl Application {
     pub fn new(ui: util::ThreadChannel<ui::Message>) -> Self {
         Self {
             secret_key: String::from("Swordfish"),
-            state: State(LogicStateMachine::init),
+            state: State(Application::init),
             clock: time::Instant::now(),
             frame_count: 0,
+            server: transmission::Server::new(ui.clone()),
             ui,
             settings: settings::LogicSettings::default(),
             files_for_transmission: StyledPathList::new(
@@ -54,12 +55,11 @@ impl LogicStateMachine {
                 ),
                 vec![StyledFilePath::new("")],
             ),
-            server: transmission::Server::new(),
         }
     }
 
     pub fn run(&mut self) -> Result<()> {
-        while self.state != State(LogicStateMachine::exit) {
+        while self.state != State(Application::exit) {
             self.state = (self.state)(self)?;
         }
         Ok(())
@@ -116,6 +116,9 @@ impl LogicStateMachine {
     }
 
     pub fn home(&mut self) -> Result<State> {
+        self.ui.send(ui::Message::Event(ui::Event::StateChange(
+            AppState::Home(String::from(""))
+        )))?;
         // self.ui
         //     .send(ui::Message::Event(ui::Event::StateChange(AppState::Home({
         //         let ip = self.server.public_ip.to_string();
@@ -144,7 +147,9 @@ impl LogicStateMachine {
     }
 
     pub fn init(&mut self) -> Result<State> {
-        // Setup TCP listener
+        // TODO: Is this state necessary, or should we start right to home? 
+        // Starting is probably quick enough that we can go straight to home. If that weren't the case, this could be used for displaying start-up information or a splash screen
+        
         Ok(State(Self::home))
     }
 
