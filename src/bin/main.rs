@@ -7,15 +7,10 @@
 use anyhow::Result;
 use std::thread;
 
-mod application_logic;
-mod file_processing;
-use application_logic::Application;
-mod settings;
-mod transmission;
-// use crate::transmission;
-mod ui;
-mod util;
-mod widget;
+use bitgeon::application_logic::Application;
+use bitgeon::util;
+use bitgeon::ui;
+
 
 fn main() -> Result<()> {
     // Initialize state machine
