@@ -8,9 +8,8 @@ use anyhow::Result;
 use std::thread;
 
 use bitgeon::application_logic::Application;
-use bitgeon::util;
 use bitgeon::ui;
-
+use bitgeon::util;
 
 fn main() -> Result<()> {
     // Initialize state machine
@@ -21,7 +20,7 @@ fn main() -> Result<()> {
     let ui = thread::Builder::new()
         .name("User Interface".to_string())
         .spawn(move || -> Result<()> {
-            ui::UI::run(app)?;
+            ui::Ui::run(app)?;
             Ok(())
         })?;
 

@@ -40,7 +40,7 @@ pub enum AppState {
     Initialization,
 }
 
-pub struct UI {
+pub struct Ui {
     pub application: util::ThreadChannel<Message>,
     pub application_state: AppState,
     pub scene: Scene,
@@ -51,10 +51,10 @@ pub struct UI {
     pub frame_changed: bool,
 }
 
-impl UI {
+impl Ui {
     pub fn run(application: util::ThreadChannel<Message>) -> Result<()> {
         // Setup
-        let mut ui = UI {
+        let mut ui = Ui {
             application,
             application_state: AppState::Initialization,
             scene: Scene::Home(scene::Home::new(String::from(""))),
@@ -128,7 +128,7 @@ impl UI {
 
                         // let message = self.scene.interact(event)?;
                         if let Some(message) = message {
-                            self.application.send(message);
+                            self.application.send(message)?;
                         }
                         self.frame_changed = true;
                     }
@@ -186,7 +186,7 @@ impl UI {
         // Get updates from logic of the program. Progress for progress bars for example
         let app_updates = self.application.receive();
 
-        if app_updates.len() > 0 {
+        if !app_updates.is_empty() {
             for message in app_updates {
                 match message {
                     Message::Event(event) => match event {

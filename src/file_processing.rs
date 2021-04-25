@@ -38,11 +38,13 @@ pub fn parse_paths(path_string: &str) -> Result<Vec<String>> {
     while capture_pos < path_string.len() {
         let result = RE
             .captures_from_pos(&path_string, capture_pos)
-            .with_context(|| format!("Error running regex"))?;
+            .with_context(|| String::from("Error running regex"))?;
 
         match result {
             Some(captures) => {
-                let group = captures.get(0).with_context(|| format!("No regex group"))?;
+                let group = captures
+                    .get(0)
+                    .with_context(|| String::from("No regex group"))?;
                 let path = group.as_str();
                 let path = path
                     .trim_matches(|c: char| c.is_whitespace() || trim_characters.contains(&c))
@@ -69,7 +71,7 @@ pub fn check_path(path_string: &str) -> Result<PathState> {
 
     // If the path is relative, trim it and add "./" to the beginning
     let trim_characters = ['\\', '/', '.'];
-    if Path::new(&path).is_relative() && path.len() > 0 {
+    if Path::new(&path).is_relative() && !path.is_empty() {
         let first_character = path.chars().next().unwrap(); // At least one character is contained, as given by the check above
         if first_character != '.' {
             path = path
@@ -118,7 +120,7 @@ fn is_hidden_path(entry: &DirEntry) -> bool {
     entry
         .file_name()
         .to_str()
-        .map(|s| s.starts_with("."))
+        .map(|s| s.starts_with('.'))
         .unwrap_or(false)
 }
 

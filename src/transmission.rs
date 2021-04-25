@@ -20,13 +20,12 @@ pub enum ServerStatus {
     #[error("Unable to obtain external port")]
     ExternalPortError(anyhow::Error),
     #[error("Unable to get local IP")]
-    LocalIPError(anyhow::Error),
+    LocalIpError(anyhow::Error),
     #[error("Unable to get external IP")]
-    PublicIPError(anyhow::Error),
+    PublicIpError(anyhow::Error),
     #[error("Unable to create TCPListener")]
-    TCPBindError(anyhow::Error),
+    TcpBindError(anyhow::Error),
 }
-
 
 pub struct Server {
     listener: Option<TcpListener>,
@@ -44,7 +43,7 @@ pub struct Server {
 }
 
 impl Server {
-    pub fn new(ui: util::ThreadChannel::<ui::Message>) -> Server {
+    pub fn new(ui: util::ThreadChannel<ui::Message>) -> Server {
         let mut server = Server {
             listener: None,
             local_ip: None,
@@ -72,7 +71,7 @@ impl Server {
         match TcpListener::bind("0.0.0.0:0") {
             Ok(listener) => self.listener = Some(listener),
             Err(error) => {
-                self.status = ServerStatus::TCPBindError(anyhow!(error));
+                self.status = ServerStatus::TcpBindError(anyhow!(error));
                 return;
             }
         }
@@ -80,7 +79,7 @@ impl Server {
         match get_local_ip() {
             Ok(ip) => self.local_ip = Some(ip),
             Err(error) => {
-                self.status = ServerStatus::LocalIPError(anyhow!(error));
+                self.status = ServerStatus::LocalIpError(anyhow!(error));
                 return;
             }
         };
@@ -88,7 +87,7 @@ impl Server {
         match get_public_ip() {
             Ok(ip) => self.public_ip = Some(ip),
             Err(error) => {
-                self.status = ServerStatus::PublicIPError(anyhow!(error));
+                self.status = ServerStatus::PublicIpError(anyhow!(error));
                 return;
             }
         };
@@ -153,20 +152,20 @@ impl Server {
         // let local_ip = self.local_ip.ok_or_else( || "No local IP address.")?;
         let internal_port = self
             .internal_port
-            .with_context(|| format!("No internal port."))?;
+            .with_context(|| String::from("No internal port."))?;
         let local_ip = self
             .local_ip
-            .with_context(|| format!("No local IP address."))?;
+            .with_context(|| String::from("No local IP address."))?;
         let local_ip = match local_ip {
             IpAddr::V4(ipv4) => Ok(ipv4),
             // IpAddr::V6(ipv6) => Err("Local IP is IPv6, but only IPv4 is supported.".into()),
-            IpAddr::V6(ipv6) => Err(anyhow!(String::from(
+            IpAddr::V6(_) => Err(anyhow!(String::from(
                 "Local IP is IPv6, but only IPv4 is supported."
             ))),
         }?;
         let local_address = SocketAddrV4::new(local_ip, internal_port);
         let gateway = igd::search_gateway(Default::default())
-            .with_context(|| format!("Unable to find gateway device. Verify connection."))?;
+            .with_context(|| String::from("Unable to find gateway device. Verify connection."))?;
         let external_port = gateway
             .add_any_port(
                 igd::PortMappingProtocol::TCP,
@@ -174,10 +173,10 @@ impl Server {
                 self.upnp_lease_duration
                     .as_secs()
                     .try_into()
-                    .with_context(|| format!("UPnP lease duration should fit into u32"))?,
+                    .with_context(|| String::from("UPnP lease duration should fit into u32"))?,
                 "Bitgeon",
             )
-            .with_context(|| format!("Unable to add port mapping via UPnP."))?;
+            .with_context(|| String::from("Unable to add port mapping via UPnP."))?;
         self.upnp_lease_clock = time::Instant::now();
         self.external_port = Some(external_port);
         Ok(external_port)
@@ -186,10 +185,10 @@ impl Server {
     pub fn refresh_ips(&mut self) -> Result<()> {
         // Refresh connection info. Call this in case of errors trying to establish a connection, but also let the user call this.
         let local_ip =
-            get_local_ip().with_context(|| format!("Unable to get local IP address."))?;
+            get_local_ip().with_context(|| String::from("Unable to get local IP address."))?;
         self.local_ip = Some(local_ip);
         let public_ip =
-            get_public_ip().with_context(|| format!("Unable to get public IP address."))?;
+            get_public_ip().with_context(|| String::from("Unable to get public IP address."))?;
         self.public_ip = Some(public_ip);
         Ok(())
     }
@@ -201,28 +200,30 @@ pub struct Peer {
 }
 
 pub fn get_public_ip() -> Result<IpAddr> {
-    let gateway = igd::search_gateway(Default::default())
-        .with_context(|| format!("Unable to find gateway. Verify your internet connection."))?;
+    let gateway = igd::search_gateway(Default::default()).with_context(|| {
+        String::from("Unable to find gateway. Verify your internet connection.")
+    })?;
 
     let ip = gateway
         .get_external_ip()
-        .with_context(|| format!("Unable to get external IP address."))?;
+        .with_context(|| String::from("Unable to get external IP address."))?;
     Ok(IpAddr::from(ip))
 }
 
 pub fn get_local_ip() -> Result<IpAddr> {
     // https://stackoverflow.com/a/166589/5780938
 
-    let gateway = igd::search_gateway(Default::default())
-        .with_context(|| format!("Unable to find gateway. Verify your internet connection."))?;
+    let gateway = igd::search_gateway(Default::default()).with_context(|| {
+        String::from("Unable to find gateway. Verify your internet connection.")
+    })?;
 
     // Bind to every available interface on an unused port
     let socket = UdpSocket::bind("0.0.0.0:0")
-        .with_context(|| format!("Unable to bind UDP socket to \"0.0.0.0:0\"."))?;
+        .with_context(|| String::from("Unable to bind UDP socket to \"0.0.0.0:0\"."))?;
 
     socket
         .connect(gateway.addr)
-        .with_context(|| format!("Unable to connect to gateway."))?;
+        .with_context(|| String::from("Unable to connect to gateway."))?;
 
     let local_address = socket.local_addr()?;
     Ok(local_address.ip())

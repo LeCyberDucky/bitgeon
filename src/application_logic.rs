@@ -14,8 +14,10 @@ pub struct State(pub fn(&mut Application) -> Result<State>);
 // Used for comparing states
 impl PartialEq for State {
     fn eq(&self, rhs: &Self) -> bool {
-        self.0 as *const fn(&mut Application) -> State
-            == rhs.0 as *const fn(&mut Application) -> State
+        std::ptr::eq(
+            self.0 as *const fn(&mut Application) -> State,
+            rhs.0 as *const fn(&mut Application) -> State,
+        )
     }
 }
 
@@ -70,7 +72,7 @@ impl Application {
         loop {
             // interact with ui
             ui_updates = self.ui.receive();
-            if ui_updates.len() > 0 {
+            if !ui_updates.is_empty() {
                 break;
             }
 
@@ -100,8 +102,6 @@ impl Application {
             }
         }
 
-        dbg!("Done with editing files. Going back home. 🏠");
-
         Ok(State(Self::home))
     }
 
@@ -116,9 +116,10 @@ impl Application {
     }
 
     pub fn home(&mut self) -> Result<State> {
-        self.ui.send(ui::Message::Event(ui::Event::StateChange(
-            AppState::Home(String::from(""))
-        )))?;
+        self.ui
+            .send(ui::Message::Event(ui::Event::StateChange(AppState::Home(
+                String::from(""),
+            ))))?;
         // self.ui
         //     .send(ui::Message::Event(ui::Event::StateChange(AppState::Home({
         //         let ip = self.server.public_ip.to_string();
@@ -130,13 +131,12 @@ impl Application {
 
         for message in ui_updates {
             match message {
-                ui::Message::Event(event) => match event {
-                    ui::Event::Selection(selection) => match selection {
-                        0 => return Ok(State(Self::edit_files)),
-                        1 => return Ok(State(Self::receive)),
-                        2 => return Ok(State(Self::end)),
-                        _ => todo!(),
-                    },
+                // ui::Message::Event(event) => match event {
+                //     ui::Event::Selection(selection) => match selection {
+                ui::Message::Event(ui::Event::Selection(selection)) => match selection {
+                    0 => return Ok(State(Self::edit_files)),
+                    1 => return Ok(State(Self::receive)),
+                    2 => return Ok(State(Self::end)),
                     _ => todo!(),
                 },
                 _ => todo!(),
@@ -147,9 +147,9 @@ impl Application {
     }
 
     pub fn init(&mut self) -> Result<State> {
-        // TODO: Is this state necessary, or should we start right to home? 
+        // TODO: Is this state necessary, or should we start right to home?
         // Starting is probably quick enough that we can go straight to home. If that weren't the case, this could be used for displaying start-up information or a splash screen
-        
+
         Ok(State(Self::home))
     }
 

@@ -263,7 +263,7 @@ impl StyledPathList {
     }
 
     pub fn select_first(&mut self) {
-        if self.paths.len() == 0 {
+        if self.paths.is_empty() {
             self.insert_empty_element(0);
         }
 
