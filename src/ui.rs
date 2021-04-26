@@ -52,9 +52,8 @@ pub struct Ui {
 }
 
 impl Ui {
-    pub fn run(application: util::ThreadChannel<Message>) -> Result<()> {
-        // Setup
-        let mut ui = Ui {
+    pub fn new(application: util::ThreadChannel<Message>, server: util::ThreadChannel<Message>) -> Self {
+        Self {
             application,
             application_state: AppState::Initialization,
             scene: Scene::Home(scene::Home::new(String::from(""))),
@@ -63,8 +62,10 @@ impl Ui {
             frame_count: 0,
             last_frame: time::Instant::now(),
             frame_changed: true,
-        };
+        }
+    }
 
+    pub fn run(&mut self) -> Result<()> {
         crossterm::terminal::enable_raw_mode()?;
         io::stdout().execute(crossterm::terminal::EnableLineWrap)?;
         io::stdout().execute(crossterm::terminal::EnterAlternateScreen)?;
@@ -72,16 +73,16 @@ impl Ui {
         let mut terminal = tui::Terminal::new(CrosstermBackend::new(io::stdout()))?;
 
         // TODO: Figure out what is happening here and document that in a comment
-        while std::mem::discriminant(&ui.scene) != std::mem::discriminant(&Scene::End) {
-            ui.update();
-            if ui.frame_changed {
+        while std::mem::discriminant(&self.scene) != std::mem::discriminant(&Scene::End) {
+            self.update();
+            if self.frame_changed {
                 // Visual change necessitates redraw
-                ui.frame_changed = false;
-                ui.draw(&mut terminal)?;
+                self.frame_changed = false;
+                self.draw(&mut terminal)?;
             }
-            ui.interact()?; // User interaction
+            self.interact()?; // User interaction
 
-            util::sleep_remaining_frame(&ui.clock, &mut ui.frame_count, ui.ui_refresh_rate);
+            util::sleep_remaining_frame(&self.clock, &mut self.frame_count, self.ui_refresh_rate);
         }
 
         // Reset terminal to initial state

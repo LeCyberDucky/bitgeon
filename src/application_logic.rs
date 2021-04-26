@@ -4,7 +4,7 @@ use std::time;
 use anyhow::Result;
 
 use crate::settings;
-use crate::transmission;
+use crate::server;
 use crate::ui::{self, AppState, Data};
 use crate::util;
 use crate::widget::{StyledFilePath, StyledPathList};
@@ -31,24 +31,22 @@ impl Deref for State {
 }
 
 pub struct Application {
-    pub secret_key: String,
     pub state: State,
     pub clock: time::Instant,
     pub frame_count: u128,
     pub ui: util::ThreadChannel<ui::Message>,
     pub settings: settings::LogicSettings,
     pub files_for_transmission: StyledPathList,
-    pub server: transmission::Server,
+    pub server: util::ThreadChannel<server::Message>,
 }
 
 impl Application {
-    pub fn new(ui: util::ThreadChannel<ui::Message>) -> Self {
+    pub fn new(ui: util::ThreadChannel<ui::Message>, server: util::ThreadChannel<server::Message>) -> Self {
         Self {
-            secret_key: String::from("Swordfish"),
             state: State(Application::init),
             clock: time::Instant::now(),
             frame_count: 0,
-            server: transmission::Server::new(ui.clone()),
+            server,
             ui,
             settings: settings::LogicSettings::default(),
             files_for_transmission: StyledPathList::new(

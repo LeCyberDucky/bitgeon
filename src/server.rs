@@ -7,6 +7,7 @@ use std::time;
 use anyhow::{anyhow, Context, Result};
 use thiserror::Error;
 
+use crate::server;
 use crate::ui;
 use crate::util;
 
@@ -27,6 +28,10 @@ pub enum ServerStatus {
     TcpBindError(anyhow::Error),
 }
 
+pub enum Message {
+
+}
+
 pub struct Server {
     listener: Option<TcpListener>,
     pub local_ip: Option<IpAddr>,
@@ -37,14 +42,15 @@ pub struct Server {
     upnp_lease_duration: time::Duration,
     peers: Vec<Peer>,
     pub status: ServerStatus, // Should we have a vector of errors or only store one at a time?
-    // application: util::ThreadChannel<Message>,
+    application: util::ThreadChannel<Message>,
     ui: util::ThreadChannel<ui::Message>,
+    secret_key: String,
     clock: time::Instant,
 }
 
 impl Server {
-    pub fn new(ui: util::ThreadChannel<ui::Message>) -> Server {
-        let mut server = Server {
+    pub fn new(application: util::ThreadChannel<server::Message>, ui: util::ThreadChannel<ui::Message>) -> Self {
+        Self {
             listener: None,
             local_ip: None,
             public_ip: None,
@@ -54,13 +60,16 @@ impl Server {
             upnp_lease_duration: time::Duration::from_secs(60 * 15), // TODO: Don't hard code this. Read from config file but also provide default value
             peers: vec![],
             status: ServerStatus::Ok,
+            application,
             ui,
-            // application,
+            secret_key: String::from("Swordfish"),
             clock: time::Instant::now(),
-        };
+        }
+    }
 
-        server.refresh_connection();
-        server
+    pub fn run(&mut self) -> Result<()> {
+        self.refresh_connection();
+        Ok(())
     }
 
     pub fn refresh_connection(&mut self) {
@@ -133,11 +142,6 @@ impl Server {
     pub fn establish_connection() -> Result<Option<Peer>> {
         // Open outgoing connection to peer
         todo!();
-    }
-
-    pub fn run(&mut self) {
-        // Set up connection
-        self.refresh_connection(); // Store result in status?
     }
 
     // fn get_free_port() -> Result<u16> {
