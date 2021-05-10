@@ -24,6 +24,22 @@ impl Default for LogicSettings {
     }
 }
 
+pub struct ServerSettings {
+    pub logic_refresh_rate: u128,
+}
+
+impl ServerSettings {
+    fn new(logic_refresh_rate: u128) -> Self {
+        Self { logic_refresh_rate }
+    }
+}
+
+impl Default for ServerSettings {
+    fn default() -> Self {
+        Self::new(60)
+    }
+}
+
 mod config {}
 
 mod style {}

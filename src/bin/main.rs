@@ -7,7 +7,7 @@
 use anyhow::Result;
 use std::thread;
 
-use bitgeon::application_logic::Application;
+use bitgeon::backend::Application;
 use bitgeon::server;
 use bitgeon::ui;
 use bitgeon::util;
@@ -28,13 +28,14 @@ fn main() -> Result<()> {
             Ok(())
         })?;
 
-    let server = thread::Builder::new()
-        .name(String::from("Server"))
-        .spawn(move || -> Result<()> {
-            let mut server = server::Server::new(server_to_app, server_to_ui);
-            server.run()?;
-            Ok(())
-        })?;
+    let server =
+        thread::Builder::new()
+            .name(String::from("Server"))
+            .spawn(move || -> Result<()> {
+                let mut server = server::Server::new(server_to_app, server_to_ui);
+                server.run()?;
+                Ok(())
+            })?;
 
     application.run()?;
 

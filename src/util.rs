@@ -5,22 +5,22 @@ use std::thread;
 use std::time;
 
 #[derive(Clone)]
-pub struct ThreadChannel<T> {
-    pub sender: crossbeam_channel::Sender<T>,
-    pub receiver: crossbeam_channel::Receiver<T>,
+pub struct ThreadChannel<TX, RX> {
+    pub sender: crossbeam_channel::Sender<TX>,
+    pub receiver: crossbeam_channel::Receiver<RX>,
 }
 
-impl<T> ThreadChannel<T> {
+impl<TX, RX> ThreadChannel<TX, RX> {
     pub fn new(
-        sender: crossbeam_channel::Sender<T>,
-        receiver: crossbeam_channel::Receiver<T>,
+        sender: crossbeam_channel::Sender<TX>,
+        receiver: crossbeam_channel::Receiver<RX>,
     ) -> Self {
         Self { sender, receiver }
     }
 
-    pub fn new_pair() -> (ThreadChannel<T>, ThreadChannel<T>) {
-        let (a_tx, b_rx) = crossbeam_channel::unbounded();
-        let (b_tx, a_rx) = crossbeam_channel::unbounded();
+    pub fn new_pair() -> (ThreadChannel<TX, RX>, ThreadChannel<RX, TX>) {
+        let (a_tx, b_rx) = crossbeam_channel::unbounded::<TX>();
+        let (b_tx, a_rx) = crossbeam_channel::unbounded::<RX>();
 
         let a = ThreadChannel::new(a_tx, a_rx);
         let b = ThreadChannel::new(b_tx, b_rx);
@@ -28,11 +28,11 @@ impl<T> ThreadChannel<T> {
         (a, b)
     }
 
-    pub fn send(&self, message: T) -> Result<(), TrySendError<T>> {
+    pub fn send(&self, message: TX) -> Result<(), TrySendError<TX>> {
         self.sender.try_send(message)
     }
 
-    pub fn receive(&self) -> Vec<T> {
+    pub fn receive(&self) -> Vec<RX> {
         self.receiver.try_iter().collect()
     }
 }

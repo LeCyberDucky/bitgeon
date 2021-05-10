@@ -1,36 +1,94 @@
 use std::io;
+use std::net::IpAddr;
 use std::time;
 
 use anyhow::{self, Result};
-use crossterm::{
-    self,
-    event::{self, KeyCode},
-    ExecutableCommand,
-};
+use crossterm::{self, event::KeyCode, ExecutableCommand};
 use tui::{self, backend::CrosstermBackend};
 
+use crate::backend;
+use crate::server;
 use crate::util;
 use crate::widget;
 use scene::Scene;
 use widget::StyledPathList;
 
-// Inter-process messages between ui and backend
-#[derive(Clone)]
-pub enum Message {
-    Data(Data),
-    Event(Event),
-}
+pub trait Data {}
+pub trait Event {}
 
 #[derive(Clone)]
-pub enum Data {
-    FilePathList(StyledPathList),
+pub enum Message<D, E>
+where
+    // Bounds probably not necessary, but I want to using them. Also, they might make things look a bit nicer
+    D: Data,
+    E: Event,
+{
+    Data(D),
+    Event(E),
 }
 
-#[derive(Clone)]
-pub enum Event {
-    Selection(usize),
-    StateChange(AppState),
+pub mod data {
+    use super::*;
+
+    #[derive(Clone)]
+    pub enum Backend {
+        FilePathList(StyledPathList),
+    }
+
+    #[derive(Clone)]
+    pub enum Server {
+        ConnectionInfo {
+            public_ip: Option<IpAddr>,
+            external_port: Option<u16>,
+            // status: ServerStatus,
+            secret_key: String,
+        },
+    }
+
+    impl Data for Backend {}
+    impl Data for Server {}
 }
+
+pub mod event {
+    use super::*;
+
+    #[derive(Clone)]
+    pub enum Backend {
+        StateChange(AppState),
+    }
+
+    #[derive(Clone)]
+    pub enum Server {}
+
+    impl Event for Backend {}
+    impl Event for Server {}
+}
+
+// // Inter-process messages between ui and backend
+// #[derive(Clone)]
+// pub enum Message {
+//     Data(Data),
+//     Event(Event),
+// }
+
+// // TODO: Data should only be data that is of use for the UI
+// #[derive(Clone)]
+// pub enum Data {
+//     FilePathList(StyledPathList),
+//     ConnectionInfo {
+//         public_ip: Option<IpAddr>,
+//         external_port: Option<u16>,
+//         // status: ServerStatus,
+//         secret_key: String,
+//     },
+// }
+
+// // TODO: Events should only be events that the UI can react to
+// #[derive(Clone)]
+// pub enum Event {
+//     Selection(usize),
+//     StateChange(AppState),
+// }
 
 #[derive(Clone)]
 pub enum AppState {
@@ -41,7 +99,14 @@ pub enum AppState {
 }
 
 pub struct Ui {
-    pub application: util::ThreadChannel<Message>,
+    pub application: util::ThreadChannel<
+        backend::Message<backend::data::Ui, backend::event::Ui>,
+        Message<data::Backend, event::Backend>,
+    >,
+    pub server: util::ThreadChannel<
+        server::Message<server::data::Ui, server::event::Ui>,
+        Message<data::Server, event::Server>,
+    >,
     pub application_state: AppState,
     pub scene: Scene,
     pub ui_refresh_rate: u128,
@@ -52,9 +117,19 @@ pub struct Ui {
 }
 
 impl Ui {
-    pub fn new(application: util::ThreadChannel<Message>, server: util::ThreadChannel<Message>) -> Self {
+    pub fn new(
+        application: util::ThreadChannel<
+            backend::Message<backend::data::Ui, backend::event::Ui>,
+            Message<data::Backend, event::Backend>,
+        >,
+        server: util::ThreadChannel<
+            server::Message<server::data::Ui, server::event::Ui>,
+            Message<data::Server, event::Server>,
+        >,
+    ) -> Self {
         Self {
             application,
+            server,
             application_state: AppState::Initialization,
             scene: Scene::Home(scene::Home::new(String::from(""))),
             ui_refresh_rate: 60,
@@ -107,10 +182,10 @@ impl Ui {
     }
 
     pub fn interact(&mut self) -> Result<()> {
-        if event::poll(time::Duration::from_secs(0))? {
-            let event = event::read()?;
+        if crossterm::event::poll(time::Duration::from_secs(0))? {
+            let event = crossterm::event::read()?;
             match event {
-                event::Event::Key(key) => match key.code {
+                crossterm::event::Event::Key(key) => match key.code {
                     KeyCode::Backspace
                     | KeyCode::Char(_)
                     | KeyCode::Delete
@@ -137,48 +212,6 @@ impl Ui {
                 },
                 _ => (),
             }
-
-            // match &mut self.scene {
-            //     Scene::EditFiles(data) => match event::read()? {
-            //         // event::Event::Key(event) => match event.code {
-            //         //     KeyCode::Backspace
-            //         //     | KeyCode::Char(_)
-            //         //     | KeyCode::Delete
-            //         //     | KeyCode::Down
-            //         //     | KeyCode::Enter
-            //         //     | KeyCode::Up => data.file_paths.edit_selected(&event.code)?,
-            //         //     KeyCode::Esc => {
-            //         //         data.file_paths.edit_selected(&event.code)?;
-            //         //         self.application
-            //         //             .send(Message::Data(Data::FilePathList(data.file_paths.clone())))?;
-            //         //     }
-
-            //         //     _ => (),
-            //         // },
-            //         // // _ => todo!(),
-            //         // _ => frame_changed = self.frame_changed,
-            //     },
-
-            //     Scene::Home(data) => {
-            //         // match event::read()? {
-            //         //     event::Event::Key(event) => match event.code {
-            //         //         KeyCode::Up => data.menu.previous(),
-            //         //         KeyCode::Down => data.menu.next(),
-            //         //         KeyCode::Enter => match data.menu.state.selected() {
-            //         //             Some(option) => {
-            //         //                 self.application
-            //         //                     .send(Message::Event(Event::Selection(option)))?;
-            //         //             }
-            //         //             None => (),
-            //         //         },
-            //         //         _ => todo!(),
-            //         //     },
-            //         //     _ => frame_changed = self.frame_changed, // This is weird some kind of events trigger without user interaction, I guess...
-            //         // }
-
-            //     }
-            //     _ => todo!(),
-            // }
         }
         Ok(())
     }
@@ -191,7 +224,7 @@ impl Ui {
             for message in app_updates {
                 match message {
                     Message::Event(event) => match event {
-                        Event::StateChange(state) => {
+                        event::Backend::StateChange(state) => {
                             self.application_state = state;
                             self.scene = match &self.application_state {
                                 AppState::EditFiles(file_list) => {
@@ -204,7 +237,6 @@ impl Ui {
                                 AppState::Initialization => todo!(),
                             }
                         }
-                        Event::Selection(_option) => todo!(),
                     },
                     _ => todo!(),
                 }
@@ -217,21 +249,14 @@ impl Ui {
         self.clock.elapsed().as_micros() >= *count as u128 * 1000 / *rate as u128
         // Should we be using floating point values here?
     }
-
-    // pub fn frame_elapsed(&self) -> bool {
-    //     // self.period_elapsed(&self.frame_count, &self.ui_refresh_rate)
-    //     util::period_elapsed(&self.clock, &self.frame_count, &self.ui_refresh_rate)
-    // }
 }
 
 mod scene {
+    // TODO: Import super::*;
     use std::io;
 
     use anyhow::{self, Result};
-    use crossterm::{
-        self,
-        event::{self, KeyCode},
-    };
+    use crossterm::{self, event::KeyCode};
     use tui::{
         self,
         backend::CrosstermBackend,
@@ -240,10 +265,9 @@ mod scene {
         widgets::{Block, Borders, List, ListItem},
     };
 
-    use crate::ui;
+    use crate::backend;
     use crate::widget;
 
-    use ui::{Data, Event, Message};
     use widget::{ScrollList, StyledPathList};
 
     pub enum Scene {
@@ -275,14 +299,19 @@ mod scene {
             scene
         }
 
-        pub fn interact(&mut self, event: event::Event) -> Result<Option<Message>> {
-            if let event::Event::Key(event) = event {
+        pub fn interact(
+            &mut self,
+            event: crossterm::event::Event,
+        ) -> Result<Option<backend::Message<backend::data::Ui, backend::event::Ui>>> {
+            if let crossterm::event::Event::Key(event) = event {
                 match event.code {
                     KeyCode::Up => self.menu.previous(),
                     KeyCode::Down => self.menu.next(),
                     KeyCode::Enter => {
                         if let Some(option) = self.menu.state.selected() {
-                            return Ok(Some(Message::Event(Event::Selection(option))));
+                            return Ok(Some(backend::Message::Event(
+                                backend::event::Ui::Selection(option),
+                            )));
                         }
                     }
                     _ => (),
@@ -363,8 +392,11 @@ mod scene {
             scene
         }
 
-        pub fn interact(&mut self, event: event::Event) -> Result<Option<Message>> {
-            if let event::Event::Key(event) = event {
+        pub fn interact(
+            &mut self,
+            event: crossterm::event::Event,
+        ) -> Result<Option<backend::Message<backend::data::Ui, backend::event::Ui>>> {
+            if let crossterm::event::Event::Key(event) = event {
                 match event.code {
                     KeyCode::Backspace
                     | KeyCode::Char(_)
@@ -376,9 +408,9 @@ mod scene {
                     }
                     KeyCode::Esc => {
                         self.file_paths.edit_selected(&event.code)?;
-                        return Ok(Some(Message::Data(Data::FilePathList(
-                            self.file_paths.clone(),
-                        ))));
+                        return Ok(Some(backend::Message::Data(
+                            backend::data::Ui::FilePathList(self.file_paths.clone()),
+                        )));
                     }
 
                     _ => (),

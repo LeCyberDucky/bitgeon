@@ -1,5 +1,6 @@
 // https://github.com/ctz/rustls
 
+use std::collections::VecDeque;
 use std::convert::TryInto;
 use std::net::{IpAddr, SocketAddrV4, TcpListener, TcpStream, UdpSocket};
 use std::time;
@@ -7,7 +8,8 @@ use std::time;
 use anyhow::{anyhow, Context, Result};
 use thiserror::Error;
 
-use crate::server;
+use crate::backend;
+use crate::settings::ServerSettings;
 use crate::ui;
 use crate::util;
 
@@ -28,28 +30,79 @@ pub enum ServerStatus {
     TcpBindError(anyhow::Error),
 }
 
-pub enum Message {
+pub trait Data {}
+pub trait Event {}
 
+pub enum Message<D, E>
+where
+    // Bounds probably not necessary, but I want to using them. Also, they might make things look a bit nicer
+    D: Data,
+    E: Event,
+{
+    Data(D),
+    Event(E),
 }
+
+pub mod data {
+    use super::*;
+
+    pub enum Backend {}
+
+    pub enum Ui {}
+
+    impl Data for Backend {}
+    impl Data for Ui {}
+}
+
+pub mod event {
+    use super::*;
+
+    pub enum Backend {}
+
+    pub enum Ui {}
+
+    impl Event for Backend {}
+    impl Event for Ui {}
+}
+
+struct Job {}
 
 pub struct Server {
     listener: Option<TcpListener>,
-    pub local_ip: Option<IpAddr>,
-    pub public_ip: Option<IpAddr>,
-    pub internal_port: Option<u16>,
-    pub external_port: Option<u16>,
+    local_ip: Option<IpAddr>,
+    public_ip: Option<IpAddr>,
+    internal_port: Option<u16>,
+    external_port: Option<u16>,
     upnp_lease_clock: time::Instant,
     upnp_lease_duration: time::Duration,
     peers: Vec<Peer>,
-    pub status: ServerStatus, // Should we have a vector of errors or only store one at a time?
-    application: util::ThreadChannel<Message>,
-    ui: util::ThreadChannel<ui::Message>,
+    status: ServerStatus, // Should we have a vector of errors or only store one at a time?
+    application: util::ThreadChannel<
+        backend::Message<backend::data::Server, backend::event::Server>,
+        Message<data::Backend, event::Backend>,
+    >,
+    ui: util::ThreadChannel<
+        ui::Message<ui::data::Server, ui::event::Server>,
+        Message<data::Ui, event::Ui>,
+    >,
     secret_key: String,
     clock: time::Instant,
+    queue: VecDeque<Job>,
+    frame_count: u128,
+    settings: ServerSettings,
 }
 
 impl Server {
-    pub fn new(application: util::ThreadChannel<server::Message>, ui: util::ThreadChannel<ui::Message>) -> Self {
+    pub fn new(
+        application: util::ThreadChannel<
+            backend::Message<backend::data::Server, backend::event::Server>,
+            Message<data::Backend, event::Backend>,
+        >,
+        ui: util::ThreadChannel<
+            ui::Message<ui::data::Server, ui::event::Server>,
+            Message<data::Ui, event::Ui>,
+        >,
+    ) -> Self {
         Self {
             listener: None,
             local_ip: None,
@@ -64,11 +117,31 @@ impl Server {
             ui,
             secret_key: String::from("Swordfish"),
             clock: time::Instant::now(),
+            queue: VecDeque::new(),
+            frame_count: 0,
+            settings: ServerSettings::default(),
         }
     }
 
     pub fn run(&mut self) -> Result<()> {
+        // Initialize server
         self.refresh_connection();
+        self.display_connection();
+
+        loop {
+            // Listen for incoming connections
+            // Listen for incoming messages from peers
+            // Listen for messages from application or UI
+            // Work on jobs
+            // Sleep
+
+            util::sleep_remaining_frame(
+                &self.clock,
+                &mut self.frame_count,
+                self.settings.logic_refresh_rate,
+            );
+        }
+
         Ok(())
     }
 
@@ -194,6 +267,14 @@ impl Server {
         let public_ip =
             get_public_ip().with_context(|| String::from("Unable to get public IP address."))?;
         self.public_ip = Some(public_ip);
+        Ok(())
+    }
+
+    pub fn display_connection(&self) -> Result<()> {
+        todo!();
+        // let message;
+
+        // self.ui.send(message)?;
         Ok(())
     }
 }
