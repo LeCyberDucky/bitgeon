@@ -40,7 +40,7 @@ pub mod data {
         ConnectionInfo {
             public_ip: Option<IpAddr>,
             external_port: Option<u16>,
-            // status: ServerStatus,
+            status: String,
             secret_key: String,
         },
     }
@@ -131,7 +131,7 @@ impl Ui {
             application,
             server,
             application_state: AppState::Initialization,
-            scene: Scene::Home(scene::Home::new(String::from(""))),
+            scene: Scene::Home(scene::Home::new()),
             ui_refresh_rate: 60,
             clock: time::Instant::now(),
             frame_count: 0,
@@ -232,7 +232,7 @@ impl Ui {
                                 }
                                 AppState::End => Scene::End,
                                 AppState::Home(connection_info) => {
-                                    Scene::Home(scene::Home::new(connection_info.to_owned()))
+                                    Scene::Home(scene::Home::new())
                                 }
                                 AppState::Initialization => todo!(),
                             }
@@ -253,10 +253,12 @@ impl Ui {
 
 mod scene {
     // TODO: Import super::*;
-    use std::io;
+    use super::*;
 
-    use anyhow::{self, Result};
-    use crossterm::{self, event::KeyCode};
+    // use std::io;
+
+    // use anyhow::{self, Result};
+    // use crossterm::{self, event::KeyCode};
     use tui::{
         self,
         backend::CrosstermBackend,
@@ -265,8 +267,8 @@ mod scene {
         widgets::{Block, Borders, List, ListItem},
     };
 
-    use crate::backend;
-    use crate::widget;
+    // use crate::backend;
+    // use crate::widget;
 
     use widget::{ScrollList, StyledPathList};
 
@@ -279,11 +281,11 @@ mod scene {
 
     pub struct Home {
         pub menu: ScrollList,
-        pub connection_info: String,
+        pub connection_info: Option<String>,
     }
 
     impl Home {
-        pub fn new(connection_info: String) -> Home {
+        pub fn new() -> Home {
             let mut scene = Home {
                 menu: ScrollList::new(
                     String::from("Choose an option:"),
@@ -293,7 +295,7 @@ mod scene {
                         String::from("End"),
                     ],
                 ),
-                connection_info,
+                connection_info: None,
             };
             scene.menu.next();
             scene

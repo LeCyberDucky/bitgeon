@@ -272,9 +272,14 @@ impl Server {
 
     pub fn display_connection(&self) -> Result<()> {
         todo!();
-        // let message;
+        let connection_info = ui::data::Server::ConnectionInfo{
+            public_ip: self.public_ip,
+            external_port: self.external_port,
+            status: format!("{}", self.status),
+            secret_key: self.secret_key
+        };
 
-        // self.ui.send(message)?;
+        self.ui.send(ui::Message::Data(connection_info))?;
         Ok(())
     }
 }
