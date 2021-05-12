@@ -129,10 +129,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_parse_paths() {
+    fn parse_paths() {
         let input = r"C:\Users\USERNAME\images\ferris.jpg C:\Users\USERNAME\images; /images/; /images/ferris.jpg";
 
-        let output = parse_paths(input);
+        let output = super::parse_paths(input);
 
         println!("{:#?}", output);
 
@@ -147,7 +147,7 @@ mod tests {
 
         let input = r"aklæsjdagklsdjfskhgdælaC:\Users\USERNAME\OneDrive\Documents\USER home\Programming\Projects\bitgeon\src\bin\ui.rs";
 
-        let output = parse_paths(input);
+        let output = super::parse_paths(input);
 
         println!("{:#?}", output);
 
